@@ -58,7 +58,7 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         env.add(new DirectionalLight().set(0.32f, 0.46f, 0.72f, 0.7f, -0.2f, 0.45f));
         env.add(new PointLight().set(1f, 0.97f, 0.88f, -2.6f, 4.4f, 3.2f, 17f));
         chromeEnvironment=createChromeEnvironment();
-        env.set(CubemapAttribute.createEnvironmentMap(chromeEnvironment));
+        env.set(new CubemapAttribute(CubemapAttribute.EnvironmentMap, chromeEnvironment));
 
         ModelBuilder mb = new ModelBuilder();
         Material chrome = new Material(
