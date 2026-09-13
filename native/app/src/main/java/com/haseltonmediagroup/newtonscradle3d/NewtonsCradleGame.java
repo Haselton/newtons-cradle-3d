@@ -20,6 +20,7 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private ModelBatch batch;
     private Environment env;
     private Model sphereModel, beamModel, rodModel, stringModel, floorModel;
+    private Cubemap chromeEnvironment;
     private final Array<ModelInstance> balls = new Array<>();
     private final Array<ModelInstance> strings = new Array<>();
     private final Array<ModelInstance> frame = new Array<>();
@@ -47,27 +48,31 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public void create() {
         batch = new ModelBatch();
         camera = new PerspectiveCamera(42f, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camera.position.set(5.4f, 3.75f, 20.5f);
-        camera.lookAt(0f, 1.25f, 0f);
+        camera.position.set(2.75f, 3.25f, 16.7f);
+        camera.lookAt(0f, 1.55f, 0f);
         camera.near = 0.1f; camera.far = 100f; camera.update();
 
         env = new Environment();
-        env.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.20f, 0.22f, 0.27f, 1f));
-        env.add(new DirectionalLight().set(1.0f, 0.93f, 0.82f, -0.55f, -1f, -0.45f));
-        env.add(new DirectionalLight().set(0.34f, 0.48f, 0.75f, 0.55f, -0.25f, 0.65f));
-        env.add(new PointLight().set(0.95f, 0.98f, 1f, -2.7f, 3.8f, 4.2f, 11f));
+        env.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.075f, 0.085f, 0.11f, 1f));
+        env.add(new DirectionalLight().set(1f, 1f, 1f, -0.45f, -0.75f, -0.55f));
+        env.add(new DirectionalLight().set(0.32f, 0.46f, 0.72f, 0.7f, -0.2f, 0.45f));
+        env.add(new PointLight().set(1f, 0.97f, 0.88f, -2.6f, 4.4f, 3.2f, 17f));
+        chromeEnvironment=createChromeEnvironment();
+        env.set(CubemapAttribute.createEnvironmentMap(chromeEnvironment));
 
         ModelBuilder mb = new ModelBuilder();
         Material chrome = new Material(
-                ColorAttribute.createDiffuse(new Color(0.40f, 0.44f, 0.50f, 1f)),
+                ColorAttribute.createDiffuse(new Color(0.11f, 0.13f, 0.16f, 1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
+                ColorAttribute.createReflection(new Color(0.94f,0.97f,1f,1f)),
                 FloatAttribute.createShininess(128f));
         Material frameChrome = new Material(
-                ColorAttribute.createDiffuse(new Color(0.30f,0.33f,0.38f,1f)),
+                ColorAttribute.createDiffuse(new Color(0.08f,0.09f,0.11f,1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
+                ColorAttribute.createReflection(new Color(0.72f,0.78f,0.88f,1f)),
                 FloatAttribute.createShininess(112f));
         Material cord = new Material(ColorAttribute.createDiffuse(new Color(0.55f,0.58f,0.62f,1f)), ColorAttribute.createSpecular(Color.WHITE), FloatAttribute.createShininess(48f));
-        Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.018f,0.020f,0.024f,1f)), ColorAttribute.createSpecular(new Color(.32f,.35f,.40f,1f)), FloatAttribute.createShininess(64f));
+        Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.006f,0.007f,0.009f,1f)), ColorAttribute.createSpecular(new Color(.08f,.09f,.11f,1f)), FloatAttribute.createShininess(32f));
 
         sphereModel = mb.createSphere(R*2, R*2, R*2, 64, 64, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         beamModel = mb.createBox(1f,1f,1f, frameChrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
@@ -88,6 +93,25 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         if (!nativeReady) throw new GdxRuntimeException("Newton Dynamics failed to initialize");
         Gdx.input.setInputProcessor(this);
         reset();
+    }
+
+    private Cubemap createChromeEnvironment(){
+        Pixmap[] faces=new Pixmap[6];
+        for(int f=0;f<6;f++){
+            faces[f]=new Pixmap(64,64,Pixmap.Format.RGBA8888);
+            for(int y=0;y<64;y++){
+                float t=y/63f;
+                Color c=t<.18f?new Color(.02f,.025f,.04f,1f):
+                        t<.31f?new Color(.82f,.88f,.98f,1f):
+                        t<.54f?new Color(.08f,.10f,.15f,1f):
+                        t<.68f?new Color(.96f,.98f,1f,1f):
+                        new Color(.015f,.018f,.026f,1f);
+                faces[f].setColor(c); faces[f].drawLine(0,y,63,y);
+            }
+        }
+        Cubemap map=new Cubemap(faces[0],faces[1],faces[2],faces[3],faces[4],faces[5]);
+        for(Pixmap face:faces) face.dispose();
+        return map;
     }
 
     private void makeFrame() {
@@ -194,16 +218,16 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         if(grabbed==0) target=Math.min(0.2f,target); else target=Math.max(-0.2f,target);
         target=MathUtils.clamp(target,-0.98f,0.98f);
         long now=TimeUtils.nanoTime(); float elapsed=Math.max((now-lastDragNanos)/1_000_000_000f,0.008f);
-        releaseAngularVelocity=MathUtils.clamp((target-lastDragAngle)/elapsed,-5f,5f);
+        releaseAngularVelocity=MathUtils.clamp((target-lastDragAngle)/elapsed,-2.2f,2.2f);
         lastDragAngle=target; lastDragNanos=now;
         NewtonPhysics.nativeSetAngle(grabbed,target); return true;
     }
-    @Override public boolean touchUp(int x,int y,int pointer,int button){ if(grabbed>=0) NewtonPhysics.nativeRelease(grabbed,releaseAngularVelocity); grabbed=-1; return true; }
+    @Override public boolean touchUp(int x,int y,int pointer,int button){ if(grabbed>=0) { if(TimeUtils.nanoTime()-lastDragNanos>80_000_000L) releaseAngularVelocity=0f; NewtonPhysics.nativeRelease(grabbed,releaseAngularVelocity); } grabbed=-1; return true; }
     @Override public boolean keyDown(int key){ if(key==Input.Keys.R) reset(); return false; }
     @Override public boolean keyUp(int key){return false;} @Override public boolean keyTyped(char c){return false;}
     @Override public boolean mouseMoved(int x,int y){return false;} @Override public boolean scrolled(float ax,float ay){return false;}
     @Override public boolean touchCancelled(int x,int y,int pointer,int button){if(grabbed>=0) NewtonPhysics.nativeRelease(grabbed,0f);grabbed=-1;return true;}
 
     @Override public void resize(int w,int h){ camera.viewportWidth=w;camera.viewportHeight=h;camera.update(); }
-    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); sphereModel.dispose(); beamModel.dispose(); rodModel.dispose(); stringModel.dispose(); floorModel.dispose(); if(impactSound!=null) impactSound.dispose(); }
+    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); sphereModel.dispose(); beamModel.dispose(); rodModel.dispose(); stringModel.dispose(); floorModel.dispose(); if(chromeEnvironment!=null) chromeEnvironment.dispose(); if(impactSound!=null) impactSound.dispose(); }
 }

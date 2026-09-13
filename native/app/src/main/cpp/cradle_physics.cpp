@@ -19,6 +19,7 @@ NewtonWorld* gWorld = nullptr;
 NewtonBody* gBalls[kBallCount]{};
 dCustomHinge* gHinges[kBallCount]{};
 float gPeakImpact = 0.0f;
+bool gImpactLatched[kBallCount - 1]{};
 std::mutex gMutex;
 
 float baseX(int i) { return (i - (kBallCount - 1) * 0.5f) * kSpacing; }
@@ -42,8 +43,6 @@ void contacts(const NewtonJoint* joint, dFloat, int) {
         NewtonMaterialSetContactElasticity(material, 0.997f);
         NewtonMaterialSetContactFrictionCoef(material, 0.03f, 0.02f, 0);
         NewtonMaterialSetContactFrictionCoef(material, 0.03f, 0.02f, 1);
-        gPeakImpact = std::max(gPeakImpact,
-                static_cast<float>(NewtonMaterialGetContactMaxNormalImpact(material)));
     }
 }
 
@@ -102,6 +101,7 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeCreate(JNIEnv*, 
     }
     NewtonDestroyCollision(sphere);
     gPeakImpact = 0.0f;
+    std::fill(std::begin(gImpactLatched), std::end(gImpactLatched), false);
     return NewtonWorldGetVersion();
 }
 
@@ -111,7 +111,22 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeStep(
     std::lock_guard<std::mutex> lock(gMutex);
     if (!gWorld || env->GetArrayLength(state) < kBallCount * 3) return 0.0f;
     gPeakImpact = 0.0f;
-    NewtonUpdate(gWorld, std::min(static_cast<float>(dt), 1.0f / 60.0f));
+    const float step = std::min(static_cast<float>(dt), 1.0f / 60.0f);
+    for (int i = 0; i < kBallCount - 1; ++i) {
+        dFloat m0[16], m1[16], v0[4], v1[4];
+        NewtonBodyGetMatrix(gBalls[i], m0); NewtonBodyGetMatrix(gBalls[i + 1], m1);
+        NewtonBodyGetVelocity(gBalls[i], v0); NewtonBodyGetVelocity(gBalls[i + 1], v1);
+        const float gap = (m1[12] - m0[12]) - 2.0f * kRadius;
+        const float approach = v0[0] - v1[0];
+        const bool imminent = approach > 0.08f && gap <= 0.012f + approach * step * 1.35f;
+        if (imminent && !gImpactLatched[i]) {
+            gPeakImpact = std::max(gPeakImpact, approach * kMass * 2.4f);
+            gImpactLatched[i] = true;
+        } else if (approach <= 0.0f || gap > 0.045f) {
+            gImpactLatched[i] = false;
+        }
+    }
+    NewtonUpdate(gWorld, step);
     float out[kBallCount * 3];
     for (int i = 0; i < kBallCount; ++i) {
         dFloat matrix[16]; NewtonBodyGetMatrix(gBalls[i], matrix);
@@ -149,6 +164,7 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeReset(JNIEnv*, j
     if (!gWorld) return;
     for (int i = 0; i < kBallCount; ++i) setBallPosition(i, 0.0f);
     gPeakImpact = 0.0f;
+    std::fill(std::begin(gImpactLatched), std::end(gImpactLatched), false);
 }
 
 extern "C" JNIEXPORT void JNICALL
