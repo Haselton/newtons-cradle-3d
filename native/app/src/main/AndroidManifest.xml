@@ -1,7 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <application android:theme="@style/AppTheme" android:label="Newton's Cradle 3D" android:hardwareAccelerated="true">
+    <application
+        android:theme="@style/AppTheme"
+        android:label="Newton's Cradle 3D"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:hardwareAccelerated="true">
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-1051867648799965~6304694010" />
