@@ -19,7 +19,7 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private PerspectiveCamera camera;
     private ModelBatch batch;
     private Environment env;
-    private Model sphereModel, beamModel, stringModel, floorModel;
+    private Model sphereModel, beamModel, rodModel, stringModel, floorModel;
     private final Array<ModelInstance> balls = new Array<>();
     private final Array<ModelInstance> strings = new Array<>();
     private final Array<ModelInstance> frame = new Array<>();
@@ -31,22 +31,24 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private static final float L = 3.05f;
     private static final float R = 0.49f;
     private static final float PIVOT_Y = 3.15f;
-    private static final float SPACING = 0.985f;
+    private static final float SPACING = 0.98f;
     private static final float STRING_Z = 0.48f;
     private final float[] physicsState = new float[N * 3];
     private boolean nativeReady;
     private int grabbed = -1;
     private float grabStartX;
     private float grabStartTheta;
-    private float autoTimer = 0f;
+    private long lastDragNanos;
+    private float lastDragAngle;
+    private float releaseAngularVelocity;
 
     public NewtonsCradleGame(PlatformBridge bridge) { this.bridge = bridge; }
 
     @Override public void create() {
         batch = new ModelBatch();
         camera = new PerspectiveCamera(42f, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camera.position.set(0f, 2.25f, 13.35f);
-        camera.lookAt(0f, 1.15f, 0f);
+        camera.position.set(5.4f, 3.75f, 20.5f);
+        camera.lookAt(0f, 1.25f, 0f);
         camera.near = 0.1f; camera.far = 100f; camera.update();
 
         env = new Environment();
@@ -69,6 +71,7 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
 
         sphereModel = mb.createSphere(R*2, R*2, R*2, 64, 64, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         beamModel = mb.createBox(1f,1f,1f, frameChrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        rodModel = mb.createCylinder(1f,1f,1f,32, frameChrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         stringModel = mb.createCylinder(0.024f,1f,0.024f,16,cord,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         floorModel = mb.createBox(14f,0.3f,8f,floorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
 
@@ -89,15 +92,20 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
 
     private void makeFrame() {
         frame.clear();
-        addBeam(0,-0.45f,0,6.8f,0.38f,2.75f);
-        addBeam(-3.10f,1.42f,-1.02f,0.25f,4.15f,0.25f);
-        addBeam(-3.10f,1.42f,1.02f,0.25f,4.15f,0.25f);
-        addBeam(3.10f,1.42f,-1.02f,0.25f,4.15f,0.25f);
-        addBeam(3.10f,1.42f,1.02f,0.25f,4.15f,0.25f);
-        addBeam(0,3.48f,-1.02f,6.45f,0.24f,0.24f);
-        addBeam(0,3.48f,1.02f,6.45f,0.24f,0.24f);
-        addBeam(0,-0.20f,-1.10f,6.45f,0.18f,0.18f);
-        addBeam(0,-0.20f,1.10f,6.45f,0.18f,0.18f);
+        addBeam(0,-0.48f,0,7.15f,0.42f,3.1f);
+        addRod(new Vector3(-3.05f,-0.25f,-1.05f),new Vector3(-3.05f,3.55f,-1.05f),.13f);
+        addRod(new Vector3(-3.05f,-0.25f, 1.05f),new Vector3(-3.05f,3.55f, 1.05f),.13f);
+        addRod(new Vector3( 3.05f,-0.25f,-1.05f),new Vector3( 3.05f,3.55f,-1.05f),.13f);
+        addRod(new Vector3( 3.05f,-0.25f, 1.05f),new Vector3( 3.05f,3.55f, 1.05f),.13f);
+        addRod(new Vector3(-3.05f,3.55f,-1.05f),new Vector3(3.05f,3.55f,-1.05f),.13f);
+        addRod(new Vector3(-3.05f,3.55f, 1.05f),new Vector3(3.05f,3.55f, 1.05f),.13f);
+    }
+
+    private void addRod(Vector3 a, Vector3 b, float diameter){
+        ModelInstance m=new ModelInstance(rodModel);
+        setCylinderBetween(m,a,b);
+        m.transform.scale(diameter,1f,diameter);
+        frame.add(m);
     }
 
     private void addBeam(float x,float y,float z,float sx,float sy,float sz){
@@ -110,7 +118,7 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
 
     private void reset(){
         if(nativeReady) NewtonPhysics.nativeReset();
-        grabbed=-1; autoTimer=0;
+        grabbed=-1;
         for(int i=0;i<N;i++) {
             physicsState[i*3]=baseX(i);
             physicsState[i*3+1]=PIVOT_Y-L;
@@ -121,8 +129,6 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
 
     @Override public void render() {
         float dt=Math.min(Gdx.graphics.getDeltaTime(),1f/30f);
-        autoTimer += dt;
-        if(grabbed<0 && autoTimer>4.5f && allQuiet()) { NewtonPhysics.nativeSetAngle(0,-0.72f); autoTimer=0; }
         stepPhysics(dt);
         updateTransforms();
 
@@ -136,8 +142,6 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         for(ModelInstance b:balls) batch.render(b,env);
         batch.end();
     }
-
-    private boolean allQuiet(){ return autoTimer > 4.5f; }
 
     private void stepPhysics(float dt){
         float impulse=NewtonPhysics.nativeStep(dt,physicsState);
@@ -172,25 +176,34 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     }
 
     @Override public boolean touchDown(int x,int y,int pointer,int button){
-        float nx=x/(float)Math.max(1,Gdx.graphics.getWidth());
-        grabbed = nx<0.5f ? 0 : N-1;
+        Vector3 left=camera.project(new Vector3(physicsState[0],physicsState[1],physicsState[2]));
+        Vector3 right=camera.project(new Vector3(physicsState[(N-1)*3],physicsState[(N-1)*3+1],physicsState[(N-1)*3+2]));
+        float sy=Gdx.graphics.getHeight()-y;
+        float dl=Vector2.dst(x,sy,left.x,left.y), dr=Vector2.dst(x,sy,right.x,right.y);
+        float grabRadius=Gdx.graphics.getWidth()*.22f;
+        if(Math.min(dl,dr)>grabRadius) return false;
+        grabbed=dl<dr?0:N-1;
         grabStartX=x;
         grabStartTheta=(float)Math.asin(MathUtils.clamp((physicsState[grabbed*3]-baseX(grabbed))/L,-1f,1f));
-        autoTimer=0; return true;
+        lastDragAngle=grabStartTheta; releaseAngularVelocity=0f; lastDragNanos=TimeUtils.nanoTime(); return true;
     }
     @Override public boolean touchDragged(int x,int y,int pointer){
         if(grabbed<0)return false;
         float dx=(x-grabStartX)/(float)Math.max(1,Gdx.graphics.getWidth());
         float target=grabStartTheta+dx*2.7f;
         if(grabbed==0) target=Math.min(0.2f,target); else target=Math.max(-0.2f,target);
-        NewtonPhysics.nativeSetAngle(grabbed,MathUtils.clamp(target,-1.15f,1.15f)); return true;
+        target=MathUtils.clamp(target,-0.98f,0.98f);
+        long now=TimeUtils.nanoTime(); float elapsed=Math.max((now-lastDragNanos)/1_000_000_000f,0.008f);
+        releaseAngularVelocity=MathUtils.clamp((target-lastDragAngle)/elapsed,-5f,5f);
+        lastDragAngle=target; lastDragNanos=now;
+        NewtonPhysics.nativeSetAngle(grabbed,target); return true;
     }
-    @Override public boolean touchUp(int x,int y,int pointer,int button){ grabbed=-1; return true; }
+    @Override public boolean touchUp(int x,int y,int pointer,int button){ if(grabbed>=0) NewtonPhysics.nativeRelease(grabbed,releaseAngularVelocity); grabbed=-1; return true; }
     @Override public boolean keyDown(int key){ if(key==Input.Keys.R) reset(); return false; }
     @Override public boolean keyUp(int key){return false;} @Override public boolean keyTyped(char c){return false;}
     @Override public boolean mouseMoved(int x,int y){return false;} @Override public boolean scrolled(float ax,float ay){return false;}
-    @Override public boolean touchCancelled(int x,int y,int pointer,int button){grabbed=-1;return true;}
+    @Override public boolean touchCancelled(int x,int y,int pointer,int button){if(grabbed>=0) NewtonPhysics.nativeRelease(grabbed,0f);grabbed=-1;return true;}
 
     @Override public void resize(int w,int h){ camera.viewportWidth=w;camera.viewportHeight=h;camera.update(); }
-    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); sphereModel.dispose(); beamModel.dispose(); stringModel.dispose(); floorModel.dispose(); if(impactSound!=null) impactSound.dispose(); }
+    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); sphereModel.dispose(); beamModel.dispose(); rodModel.dispose(); stringModel.dispose(); floorModel.dispose(); if(impactSound!=null) impactSound.dispose(); }
 }

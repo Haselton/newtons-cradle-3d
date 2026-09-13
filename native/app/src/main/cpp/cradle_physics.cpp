@@ -4,17 +4,20 @@
 #include <iterator>
 #include <mutex>
 #include "Newton.h"
+#include "dCustomHinge.h"
+#include "dMatrix.h"
 
 namespace {
 constexpr int kBallCount = 5;
 constexpr float kRadius = 0.49f;
 constexpr float kLength = 3.05f;
 constexpr float kPivotY = 3.15f;
-constexpr float kSpacing = 0.985f;
+constexpr float kSpacing = 0.98f;
 constexpr float kMass = 0.52f;
 
 NewtonWorld* gWorld = nullptr;
 NewtonBody* gBalls[kBallCount]{};
+dCustomHinge* gHinges[kBallCount]{};
 float gPeakImpact = 0.0f;
 std::mutex gMutex;
 
@@ -50,30 +53,7 @@ void destroyWorld() {
         gWorld = nullptr;
     }
     std::fill(std::begin(gBalls), std::end(gBalls), nullptr);
-}
-
-void constrainBall(int i) {
-    dFloat matrix[16];
-    dFloat velocity[4];
-    NewtonBodyGetMatrix(gBalls[i], matrix);
-    NewtonBodyGetVelocity(gBalls[i], velocity);
-    float dx = matrix[12] - baseX(i);
-    float dy = matrix[13] - kPivotY;
-    float distance = std::sqrt(dx * dx + dy * dy);
-    if (distance < 0.001f) { dx = 0.0f; dy = -kLength; distance = kLength; }
-    dx *= kLength / distance;
-    dy *= kLength / distance;
-    matrix[12] = baseX(i) + dx;
-    matrix[13] = kPivotY + dy;
-    matrix[14] = 0.0f;
-    const float tx = -dy / kLength;
-    const float ty = dx / kLength;
-    const float tangentSpeed = velocity[0] * tx + velocity[1] * ty;
-    const dFloat constrainedVelocity[4] = {
-        tangentSpeed * tx, tangentSpeed * ty, 0.0f, 0.0f
-    };
-    NewtonBodySetMatrixNoSleep(gBalls[i], matrix);
-    NewtonBodySetVelocity(gBalls[i], constrainedVelocity);
+    std::fill(std::begin(gHinges), std::end(gHinges), nullptr);
 }
 
 void setBallPosition(int i, float angle) {
@@ -95,6 +75,7 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeCreate(JNIEnv*, 
     if (!gWorld) return 0;
     NewtonSetThreadsCount(gWorld, 1);
     NewtonSetSolverIterations(gWorld, 8);
+    NewtonSetNumberOfSubsteps(gWorld, 4);
     NewtonSetContactMergeTolerance(gWorld, 0.0001f);
     const int material = NewtonMaterialGetDefaultGroupID(gWorld);
     NewtonMaterialSetDefaultElasticity(gWorld, material, material, 0.997f);
@@ -112,6 +93,12 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeCreate(JNIEnv*, 
         const dFloat angularDamping[3] = {0.0004f, 0.0004f, 0.0004f};
         NewtonBodySetAngularDamping(gBalls[i], angularDamping);
         NewtonBodySetForceAndTorqueCallback(gBalls[i], gravity);
+        dMatrix hingeFrame(dGetIdentityMatrix());
+        hingeFrame.m_front = dVector(0.0f, 0.0f, 1.0f, 0.0f);
+        hingeFrame.m_up = dVector(0.0f, 1.0f, 0.0f, 0.0f);
+        hingeFrame.m_right = hingeFrame.m_front.CrossProduct(hingeFrame.m_up);
+        hingeFrame.m_posit = dVector(baseX(i), kPivotY, 0.0f, 1.0f);
+        gHinges[i] = new dCustomHinge(hingeFrame, gBalls[i], nullptr);
     }
     NewtonDestroyCollision(sphere);
     gPeakImpact = 0.0f;
@@ -127,7 +114,6 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeStep(
     NewtonUpdate(gWorld, std::min(static_cast<float>(dt), 1.0f / 60.0f));
     float out[kBallCount * 3];
     for (int i = 0; i < kBallCount; ++i) {
-        constrainBall(i);
         dFloat matrix[16]; NewtonBodyGetMatrix(gBalls[i], matrix);
         out[i * 3] = matrix[12]; out[i * 3 + 1] = matrix[13]; out[i * 3 + 2] = matrix[14];
     }
@@ -140,6 +126,21 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeSetAngle(
         JNIEnv*, jclass, jint index, jfloat angle) {
     std::lock_guard<std::mutex> lock(gMutex);
     if (gWorld && index >= 0 && index < kBallCount) setBallPosition(index, angle);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeRelease(
+        JNIEnv*, jclass, jint index, jfloat angularVelocity) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    if (!gWorld || index < 0 || index >= kBallCount) return;
+    dFloat matrix[16];
+    NewtonBodyGetMatrix(gBalls[index], matrix);
+    const float dx = matrix[12] - baseX(index);
+    const float dy = matrix[13] - kPivotY;
+    const dFloat velocity[4] = {
+        -dy * angularVelocity, dx * angularVelocity, 0.0f, 0.0f
+    };
+    NewtonBodySetVelocity(gBalls[index], velocity);
 }
 
 extern "C" JNIEXPORT void JNICALL
