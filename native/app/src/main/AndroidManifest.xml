@@ -6,7 +6,7 @@
         android:label="Newton's Cradle 3D"
         android:hardwareAccelerated="true">
         <activity
-            android:name=".MainActivity"
+            android:name="com.haseltonmediagroup.newtonscradle3d.MainActivity"
             android:screenOrientation="portrait"
             android:exported="true">
             <intent-filter>
