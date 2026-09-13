@@ -15,7 +15,6 @@ constexpr float kMass = 0.52f;
 
 NewtonWorld* gWorld = nullptr;
 NewtonBody* gBalls[kBallCount]{};
-NewtonJoint* gHinges[kBallCount]{};
 float gPeakImpact = 0.0f;
 std::mutex gMutex;
 
@@ -51,7 +50,30 @@ void destroyWorld() {
         gWorld = nullptr;
     }
     std::fill(std::begin(gBalls), std::end(gBalls), nullptr);
-    std::fill(std::begin(gHinges), std::end(gHinges), nullptr);
+}
+
+void constrainBall(int i) {
+    dFloat matrix[16];
+    dFloat velocity[4];
+    NewtonBodyGetMatrix(gBalls[i], matrix);
+    NewtonBodyGetVelocity(gBalls[i], velocity);
+    float dx = matrix[12] - baseX(i);
+    float dy = matrix[13] - kPivotY;
+    float distance = std::sqrt(dx * dx + dy * dy);
+    if (distance < 0.001f) { dx = 0.0f; dy = -kLength; distance = kLength; }
+    dx *= kLength / distance;
+    dy *= kLength / distance;
+    matrix[12] = baseX(i) + dx;
+    matrix[13] = kPivotY + dy;
+    matrix[14] = 0.0f;
+    const float tx = -dy / kLength;
+    const float ty = dx / kLength;
+    const float tangentSpeed = velocity[0] * tx + velocity[1] * ty;
+    const dFloat constrainedVelocity[4] = {
+        tangentSpeed * tx, tangentSpeed * ty, 0.0f, 0.0f
+    };
+    NewtonBodySetMatrixNoSleep(gBalls[i], matrix);
+    NewtonBodySetVelocity(gBalls[i], constrainedVelocity);
 }
 
 void setBallPosition(int i, float angle) {
@@ -90,10 +112,6 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeCreate(JNIEnv*, 
         const dFloat angularDamping[3] = {0.0004f, 0.0004f, 0.0004f};
         NewtonBodySetAngularDamping(gBalls[i], angularDamping);
         NewtonBodySetForceAndTorqueCallback(gBalls[i], gravity);
-        const dFloat pivot[3] = {baseX(i), kPivotY, 0.0f};
-        const dFloat pin[3] = {0.0f, 0.0f, 1.0f};
-        gHinges[i] = NewtonConstraintCreateHinge(gWorld, pivot, pin, gBalls[i], nullptr);
-        NewtonJointSetCollisionState(gHinges[i], 0);
     }
     NewtonDestroyCollision(sphere);
     gPeakImpact = 0.0f;
@@ -109,6 +127,7 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeStep(
     NewtonUpdate(gWorld, std::min(static_cast<float>(dt), 1.0f / 60.0f));
     float out[kBallCount * 3];
     for (int i = 0; i < kBallCount; ++i) {
+        constrainBall(i);
         dFloat matrix[16]; NewtonBodyGetMatrix(gBalls[i], matrix);
         out[i * 3] = matrix[12]; out[i * 3 + 1] = matrix[13]; out[i * 3 + 2] = matrix[14];
     }
