@@ -62,22 +62,23 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         chromeTexture=createChromeTexture();
         Material chrome = new Material(
                 TextureAttribute.createDiffuse(chromeTexture),
-                ColorAttribute.createDiffuse(Color.WHITE),
+                TextureAttribute.createEmissive(chromeTexture),
+                ColorAttribute.createDiffuse(new Color(.34f,.36f,.40f,1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
                 FloatAttribute.createShininess(180f));
         Material frameChrome = new Material(
-                ColorAttribute.createDiffuse(new Color(0.39f,0.43f,0.49f,1f)),
+                ColorAttribute.createDiffuse(new Color(0.56f,0.60f,0.68f,1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
-                FloatAttribute.createShininess(150f));
+                FloatAttribute.createShininess(180f));
         Material cord = new Material(ColorAttribute.createDiffuse(new Color(0.55f,0.58f,0.62f,1f)), ColorAttribute.createSpecular(Color.WHITE), FloatAttribute.createShininess(48f));
         Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.006f,0.007f,0.009f,1f)), ColorAttribute.createSpecular(new Color(.08f,.09f,.11f,1f)), FloatAttribute.createShininess(32f));
 
         sphereModel = mb.createSphere(R*2, R*2, R*2, 64, 64, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal|VertexAttributes.Usage.TextureCoordinates);
         rodModel = mb.createCylinder(1f,1f,1f,32, frameChrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         stringModel = mb.createCylinder(0.024f,1f,0.024f,16,cord,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        floorModel = mb.createBox(7.15f,0.42f,3.1f,floorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        floorModel = mb.createBox(6.55f,0.34f,2.65f,floorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
 
-        floor = new ModelInstance(floorModel); floor.transform.setToTranslation(0f,-0.48f,0f);
+        floor = new ModelInstance(floorModel); floor.transform.setToTranslation(0f,-0.76f,0f);
         makeFrame();
         for(int i=0;i<N;i++) {
             balls.add(new ModelInstance(sphereModel));
@@ -97,7 +98,13 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         Color c=new Color();
         for(int y=0;y<128;y++) for(int x=0;x<256;x++){
             float v=y/127f;
-            float value=v<.16f?.78f:v<.31f?.96f:v<.43f?.40f:v<.51f?.93f:v<.68f?.23f:.055f;
+            float value;
+            if(v<.18f) value=MathUtils.lerp(.56f,.92f,v/.18f);
+            else if(v<.34f) value=MathUtils.lerp(.92f,.60f,(v-.18f)/.16f);
+            else if(v<.50f) value=MathUtils.lerp(.60f,.80f,(v-.34f)/.16f);
+            else if(v<.63f) value=MathUtils.lerp(.80f,.25f,(v-.50f)/.13f);
+            else if(v<.80f) value=MathUtils.lerp(.25f,.50f,(v-.63f)/.17f);
+            else value=MathUtils.lerp(.50f,.18f,(v-.80f)/.20f);
             float hx=(x/255f-.34f)/.12f, hy=(v-.22f)/.12f;
             float highlight=MathUtils.clamp(1f-(hx*hx+hy*hy),0f,1f)*.75f;
             value=MathUtils.clamp(value+highlight,0f,1f);
@@ -111,12 +118,12 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
 
     private void makeFrame() {
         frame.clear();
-        addRod(new Vector3(-3.05f,-0.25f,-1.05f),new Vector3(-3.05f,3.55f,-1.05f),.13f);
-        addRod(new Vector3(-3.05f,-0.25f, 1.05f),new Vector3(-3.05f,3.55f, 1.05f),.13f);
-        addRod(new Vector3( 3.05f,-0.25f,-1.05f),new Vector3( 3.05f,3.55f,-1.05f),.13f);
-        addRod(new Vector3( 3.05f,-0.25f, 1.05f),new Vector3( 3.05f,3.55f, 1.05f),.13f);
-        addRod(new Vector3(-3.05f,3.55f,-1.05f),new Vector3(3.05f,3.55f,-1.05f),.13f);
-        addRod(new Vector3(-3.05f,3.55f, 1.05f),new Vector3(3.05f,3.55f, 1.05f),.13f);
+        addRod(new Vector3(-2.82f,-0.56f,-.92f),new Vector3(-2.82f,3.43f,-.92f),.088f);
+        addRod(new Vector3(-2.82f,-0.56f, .92f),new Vector3(-2.82f,3.43f, .92f),.088f);
+        addRod(new Vector3( 2.82f,-0.56f,-.92f),new Vector3( 2.82f,3.43f,-.92f),.088f);
+        addRod(new Vector3( 2.82f,-0.56f, .92f),new Vector3( 2.82f,3.43f, .92f),.088f);
+        addRod(new Vector3(-2.82f,3.43f,-.92f),new Vector3(2.82f,3.43f,-.92f),.088f);
+        addRod(new Vector3(-2.82f,3.43f, .92f),new Vector3(2.82f,3.43f, .92f),.088f);
     }
 
     private void addRod(Vector3 a, Vector3 b, float diameter){

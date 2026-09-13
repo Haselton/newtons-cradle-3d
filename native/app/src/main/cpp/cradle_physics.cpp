@@ -111,7 +111,7 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeStep(
     std::lock_guard<std::mutex> lock(gMutex);
     if (!gWorld || env->GetArrayLength(state) < kBallCount * 3) return 0.0f;
     gPeakImpact = 0.0f;
-    const float step = std::min(static_cast<float>(dt), 1.0f / 60.0f);
+    const float step = std::min(static_cast<float>(dt), 1.0f / 30.0f);
     for (int i = 0; i < kBallCount - 1; ++i) {
         dFloat m0[16], m1[16], v0[4], v1[4];
         NewtonBodyGetMatrix(gBalls[i], m0); NewtonBodyGetMatrix(gBalls[i + 1], m1);
