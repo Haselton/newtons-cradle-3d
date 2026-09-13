@@ -2,6 +2,7 @@ package com.haseltonmediagroup.newtonscradle3d;
 
 import com.badlogic.gdx.*;
 import com.badlogic.gdx.graphics.*;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g3d.*;
 import com.badlogic.gdx.graphics.g3d.attributes.*;
 import com.badlogic.gdx.graphics.g3d.environment.*;
@@ -18,9 +19,11 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private final PlatformBridge bridge;
     private PerspectiveCamera camera;
     private ModelBatch batch;
+    private SpriteBatch backgroundBatch;
     private Environment env;
     private Model sphereModel, rodModel, stringModel, floorModel, roomFloorModel, backWallModel, shadowModel, studyModel;
     private Texture chromeTexture;
+    private Texture studyBackground;
     private final Array<ModelInstance> balls = new Array<>();
     private final Array<ModelInstance> strings = new Array<>();
     private final Array<ModelInstance> frame = new Array<>();
@@ -52,16 +55,19 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
 
     @Override public void create() {
         batch = new ModelBatch();
+        backgroundBatch = new SpriteBatch();
+        studyBackground = new Texture(Gdx.files.internal("study_background.jpg"));
+        studyBackground.setFilter(Texture.TextureFilter.Linear,Texture.TextureFilter.Linear);
         camera = new PerspectiveCamera(42f, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         camera.position.set(0f, 1.62f, 20.4f);
         camera.lookAt(0f, 1.35f, -.25f);
         camera.near = 0.1f; camera.far = 100f; camera.update();
 
         env = new Environment();
-        env.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.18f, 0.19f, 0.21f, 1f));
+        env.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.27f, 0.27f, 0.25f, 1f));
         // One dominant upper-left studio key light.  The rendered ground
         // shadows below use this same direction.
-        env.add(new DirectionalLight().set(1f, .97f, .90f, -0.42f, -0.83f, -0.36f));
+        env.add(new DirectionalLight().set(1f, .94f, .82f, -0.48f, -0.80f, -0.34f));
 
         ModelBuilder mb = new ModelBuilder();
         chromeTexture=createChromeTexture();
@@ -87,15 +93,9 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         rodModel = mb.createCylinder(1f,1f,1f,32, frameChrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         stringModel = mb.createCylinder(0.018f,1f,0.018f,16,chromeWire,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         floorModel = mb.createBox(6.55f,0.34f,2.65f,floorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        roomFloorModel = mb.createBox(14f,.10f,10f,roomFloorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        backWallModel = mb.createBox(14f,9f,.12f,wallMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         shadowModel = mb.createSphere(1f,.035f,.62f,32,8,shadowMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        studyModel = createStudyModel(mb);
 
         floor = new ModelInstance(floorModel); floor.transform.setToTranslation(0f,-0.76f,0f);
-        roomFloor = new ModelInstance(roomFloorModel); roomFloor.transform.setToTranslation(0f,-1.01f,-1.4f);
-        backWall = new ModelInstance(backWallModel); backWall.transform.setToTranslation(0f,3.38f,-4.25f);
-        study = new ModelInstance(studyModel);
         makeFrame();
         for(int i=0;i<N;i++) {
             balls.add(new ModelInstance(sphereModel));
@@ -228,12 +228,14 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         updateTransforms();
 
         Gdx.gl.glViewport(0,0,Gdx.graphics.getWidth(),Gdx.graphics.getHeight());
-        Gdx.gl.glClearColor(0.20f,0.21f,0.23f,1f);
+        Gdx.gl.glClearColor(0.05f,0.035f,0.025f,1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT|GL20.GL_DEPTH_BUFFER_BIT);
+        backgroundBatch.getProjectionMatrix().setToOrtho2D(0,0,Gdx.graphics.getWidth(),Gdx.graphics.getHeight());
+        backgroundBatch.begin();
+        backgroundBatch.draw(studyBackground,0,0,Gdx.graphics.getWidth(),Gdx.graphics.getHeight());
+        backgroundBatch.end();
+        Gdx.gl.glClear(GL20.GL_DEPTH_BUFFER_BIT);
         batch.begin(camera);
-        batch.render(backWall,env);
-        batch.render(roomFloor,env);
-        batch.render(study,env);
         batch.render(floor,env);
         for(ModelInstance s:shadows) batch.render(s);
         for(ModelInstance m:frame) batch.render(m,env);
@@ -315,5 +317,5 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public boolean touchCancelled(int x,int y,int pointer,int button){if(grabbed>=0) NewtonPhysics.nativeRelease(grabbed,0f);grabbed=-1;return true;}
 
     @Override public void resize(int w,int h){ camera.viewportWidth=w;camera.viewportHeight=h;camera.update(); }
-    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); sphereModel.dispose(); rodModel.dispose(); stringModel.dispose(); floorModel.dispose(); roomFloorModel.dispose(); backWallModel.dispose(); shadowModel.dispose(); studyModel.dispose(); if(chromeTexture!=null) chromeTexture.dispose(); if(impactSound!=null) impactSound.dispose(); }
+    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); backgroundBatch.dispose(); studyBackground.dispose(); sphereModel.dispose(); rodModel.dispose(); stringModel.dispose(); floorModel.dispose(); shadowModel.dispose(); if(chromeTexture!=null) chromeTexture.dispose(); if(impactSound!=null) impactSound.dispose(); }
 }
