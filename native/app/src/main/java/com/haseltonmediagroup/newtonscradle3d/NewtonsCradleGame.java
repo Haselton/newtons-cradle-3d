@@ -7,7 +7,9 @@ import com.badlogic.gdx.graphics.g3d.attributes.*;
 import com.badlogic.gdx.graphics.g3d.environment.*;
 import com.badlogic.gdx.graphics.g3d.utils.*;
 import com.badlogic.gdx.math.*;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.TimeUtils;
 
 public class NewtonsCradleGame extends ApplicationAdapter implements InputProcessor {
     public interface PlatformBridge { void impact(float strength); }
@@ -16,17 +18,21 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private PerspectiveCamera camera;
     private ModelBatch batch;
     private Environment env;
-    private Model sphereModel, beamModel, stringModel, floorModel;
+    private Model sphereModel, beamModel, stringModel, floorModel, accentModel;
     private final Array<ModelInstance> balls = new Array<>();
     private final Array<ModelInstance> strings = new Array<>();
     private final Array<ModelInstance> frame = new Array<>();
+    private final Array<ModelInstance> accents = new Array<>();
     private ModelInstance floor;
+    private Sound impactSound;
+    private long lastImpactMs;
 
     private static final int N = 5;
-    private static final float L = 3.15f;
-    private static final float R = 0.56f;
-    private static final float PIVOT_Y = 3.2f;
-    private static final float SPACING = 1.12f;
+    private static final float L = 3.05f;
+    private static final float R = 0.49f;
+    private static final float PIVOT_Y = 3.15f;
+    private static final float SPACING = 0.985f;
+    private static final float STRING_Z = 0.48f;
     private static final float G = 9.81f;
     private final float[] theta = new float[N];
     private final float[] omega = new float[N];
@@ -40,53 +46,73 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public void create() {
         batch = new ModelBatch();
         camera = new PerspectiveCamera(42f, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camera.position.set(0f, 2.3f, 11.8f);
-        camera.lookAt(0f, 1.2f, 0f);
+        camera.position.set(0f, 2.25f, 13.35f);
+        camera.lookAt(0f, 1.15f, 0f);
         camera.near = 0.1f; camera.far = 100f; camera.update();
 
         env = new Environment();
-        env.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.32f, 0.34f, 0.38f, 1f));
-        env.add(new DirectionalLight().set(1f, 0.96f, 0.9f, -0.55f, -1f, -0.35f));
-        env.add(new DirectionalLight().set(0.35f, 0.45f, 0.65f, 0.45f, -0.4f, 0.5f));
+        env.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.20f, 0.22f, 0.27f, 1f));
+        env.add(new DirectionalLight().set(1.0f, 0.93f, 0.82f, -0.55f, -1f, -0.45f));
+        env.add(new DirectionalLight().set(0.34f, 0.48f, 0.75f, 0.55f, -0.25f, 0.65f));
+        env.add(new PointLight().set(0.95f, 0.98f, 1f, -2.7f, 3.8f, 4.2f, 11f));
 
         ModelBuilder mb = new ModelBuilder();
         Material chrome = new Material(
-                ColorAttribute.createDiffuse(new Color(0.62f, 0.66f, 0.72f, 1f)),
+                ColorAttribute.createDiffuse(new Color(0.40f, 0.44f, 0.50f, 1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
-                FloatAttribute.createShininess(96f));
+                FloatAttribute.createShininess(128f));
         Material darkMetal = new Material(
                 ColorAttribute.createDiffuse(new Color(0.055f,0.06f,0.075f,1f)),
                 ColorAttribute.createSpecular(new Color(0.5f,0.52f,0.56f,1f)),
                 FloatAttribute.createShininess(48f));
-        Material cord = new Material(ColorAttribute.createDiffuse(new Color(0.18f,0.18f,0.2f,1f)));
-        Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.08f,0.055f,0.035f,1f)));
+        Material cord = new Material(ColorAttribute.createDiffuse(new Color(0.55f,0.58f,0.62f,1f)), ColorAttribute.createSpecular(Color.WHITE), FloatAttribute.createShininess(48f));
+        Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.075f,0.035f,0.018f,1f)), ColorAttribute.createSpecular(new Color(.20f,.12f,.07f,1f)), FloatAttribute.createShininess(30f));
+        Material accent = new Material(ColorAttribute.createDiffuse(new Color(0.38f,0.25f,0.08f,1f)), ColorAttribute.createSpecular(new Color(.95f,.72f,.28f,1f)), FloatAttribute.createShininess(80f));
 
-        sphereModel = mb.createSphere(R*2, R*2, R*2, 48, 48, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        sphereModel = mb.createSphere(R*2, R*2, R*2, 64, 64, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         beamModel = mb.createBox(1f,1f,1f, darkMetal, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        stringModel = mb.createCylinder(0.035f,1f,0.035f,12,cord,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        stringModel = mb.createCylinder(0.024f,1f,0.024f,16,cord,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         floorModel = mb.createBox(14f,0.3f,8f,floorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        accentModel = mb.createBox(1f,1f,1f,accent,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
 
         floor = new ModelInstance(floorModel); floor.transform.setToTranslation(0f,-0.72f,0f);
         makeFrame();
-        for(int i=0;i<N;i++) { balls.add(new ModelInstance(sphereModel)); strings.add(new ModelInstance(stringModel)); }
+        for(int i=0;i<N;i++) {
+            balls.add(new ModelInstance(sphereModel));
+            strings.add(new ModelInstance(stringModel));
+            strings.add(new ModelInstance(stringModel));
+        }
+        impactSound = Gdx.audio.newSound(Gdx.files.internal("newton_impact.mp3"));
         Gdx.input.setInputProcessor(this);
         reset();
     }
 
     private void makeFrame() {
         frame.clear();
-        addBeam(0,-0.45f,0,7.6f,0.42f,3.0f);
-        addBeam(-3.55f,1.45f,0,0.34f,4.4f,0.34f);
-        addBeam(3.55f,1.45f,0,0.34f,4.4f,0.34f);
-        addBeam(0,3.58f,0,7.35f,0.28f,0.30f);
-        addBeam(0,-0.05f,-1.15f,7.1f,0.22f,0.22f);
-        addBeam(0,-0.05f,1.15f,7.1f,0.22f,0.22f);
+        accents.clear();
+        addBeam(0,-0.45f,0,6.8f,0.38f,2.75f);
+        addBeam(-3.10f,1.42f,-1.02f,0.25f,4.15f,0.25f);
+        addBeam(-3.10f,1.42f,1.02f,0.25f,4.15f,0.25f);
+        addBeam(3.10f,1.42f,-1.02f,0.25f,4.15f,0.25f);
+        addBeam(3.10f,1.42f,1.02f,0.25f,4.15f,0.25f);
+        addBeam(0,3.48f,-1.02f,6.45f,0.24f,0.24f);
+        addBeam(0,3.48f,1.02f,6.45f,0.24f,0.24f);
+        addBeam(0,-0.20f,-1.10f,6.45f,0.18f,0.18f);
+        addBeam(0,-0.20f,1.10f,6.45f,0.18f,0.18f);
+        addAccent(0,-0.235f,-1.285f,5.8f,0.025f,0.035f);
+        addAccent(0,-0.235f,1.285f,5.8f,0.025f,0.035f);
     }
 
     private void addBeam(float x,float y,float z,float sx,float sy,float sz){
         ModelInstance m=new ModelInstance(beamModel);
         m.transform.setToTranslation(x,y,z).scale(sx,sy,sz);
         frame.add(m);
+    }
+
+    private void addAccent(float x,float y,float z,float sx,float sy,float sz){
+        ModelInstance m=new ModelInstance(accentModel);
+        m.transform.setToTranslation(x,y,z).scale(sx,sy,sz);
+        accents.add(m);
     }
 
     private float baseX(int i){ return (i-(N-1)/2f)*SPACING; }
@@ -110,6 +136,7 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         batch.begin(camera);
         batch.render(floor,env);
         for(ModelInstance m:frame) batch.render(m,env);
+        for(ModelInstance m:accents) batch.render(m,env);
         for(ModelInstance s:strings) batch.render(s,env);
         for(ModelInstance b:balls) batch.render(b,env);
         batch.end();
@@ -134,7 +161,14 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
                     float wi=omega[i], wj=omega[i+1];
                     omega[i]=wj*0.996f; omega[i+1]=wi*0.996f;
                     float strength=Math.min(1f,Math.abs(vi-vj)/4.5f);
-                    if(bridge!=null && strength>0.08f) bridge.impact(strength);
+                    long now=TimeUtils.millis();
+                    if(strength>0.08f && now-lastImpactMs>=55L) {
+                        lastImpactMs=now;
+                        float volume=0.18f+strength*0.72f;
+                        long id=impactSound.play(volume);
+                        impactSound.setPitch(id,0.96f+MathUtils.random()*0.08f);
+                        if(bridge!=null) bridge.impact(strength);
+                    }
                 }
             }
         }
@@ -144,8 +178,10 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         for(int i=0;i<N;i++){
             float bx=baseX(i); float x=bx+L*(float)Math.sin(theta[i]); float y=PIVOT_Y-L*(float)Math.cos(theta[i]);
             balls.get(i).transform.setToTranslation(x,y,0f);
-            Vector3 a=new Vector3(bx,PIVOT_Y,0f), b=new Vector3(x,y,0f);
-            setCylinderBetween(strings.get(i),a,b);
+            Vector3 aFront=new Vector3(bx,PIVOT_Y,-STRING_Z), bFront=new Vector3(x,y,-R*.43f);
+            Vector3 aBack=new Vector3(bx,PIVOT_Y,STRING_Z), bBack=new Vector3(x,y,R*.43f);
+            setCylinderBetween(strings.get(i*2),aFront,bFront);
+            setCylinderBetween(strings.get(i*2+1),aBack,bBack);
         }
     }
 
@@ -174,5 +210,5 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public boolean touchCancelled(int x,int y,int pointer,int button){grabbed=-1;return true;}
 
     @Override public void resize(int w,int h){ camera.viewportWidth=w;camera.viewportHeight=h;camera.update(); }
-    @Override public void dispose(){ batch.dispose(); sphereModel.dispose(); beamModel.dispose(); stringModel.dispose(); floorModel.dispose(); }
+    @Override public void dispose(){ batch.dispose(); sphereModel.dispose(); beamModel.dispose(); stringModel.dispose(); floorModel.dispose(); accentModel.dispose(); if(impactSound!=null) impactSound.dispose(); }
 }
