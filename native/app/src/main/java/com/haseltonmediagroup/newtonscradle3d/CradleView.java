@@ -36,7 +36,8 @@ public class CradleView extends GLSurfaceView {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 activeBall = nx < .5f ? 0 : 4;
-                queueEvent(() -> renderer.beginDrag(activeBall));
+                final int downBall = activeBall;
+                queueEvent(() -> renderer.beginDrag(downBall));
                 return true;
             case MotionEvent.ACTION_MOVE:
                 if (activeBall >= 0) {
@@ -80,7 +81,7 @@ public class CradleView extends GLSurfaceView {
         }
 
         @Override
-        public void onSurfaceCreated(javax.microedition.khronos.egl.EGLConfig config) {
+        public void onSurfaceCreated(javax.microedition.khronos.opengles.GL10 gl, javax.microedition.khronos.egl.EGLConfig config) {
             GLES20.glClearColor(0.018f, 0.020f, 0.025f, 1f);
             GLES20.glEnable(GLES20.GL_DEPTH_TEST);
             GLES20.glEnable(GLES20.GL_CULL_FACE);
