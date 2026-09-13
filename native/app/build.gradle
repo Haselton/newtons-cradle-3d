@@ -7,11 +7,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.haseltonmediagroup.newtonscradle3d.diagnostic'
+        applicationId 'com.haseltonmediagroup.newtonscradle3d.blackchrome'
         minSdk 26
         targetSdk 35
-        versionCode 4
-        versionName '1.0.3-black-chrome'
+        versionCode 5
+        versionName '1.0.4-black-chrome-test'
     }
 
     compileOptions {
