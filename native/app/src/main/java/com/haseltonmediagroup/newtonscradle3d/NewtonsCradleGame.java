@@ -12,7 +12,10 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.TimeUtils;
 
 public class NewtonsCradleGame extends ApplicationAdapter implements InputProcessor {
-    public interface PlatformBridge { void impact(float strength); }
+    public interface PlatformBridge {
+        void impact(float strength);
+        void naturalBreak();
+    }
 
     private final PlatformBridge bridge;
     private PerspectiveCamera camera;
@@ -39,6 +42,8 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private float grabStartX;
     private float grabStartTheta;
     private float autoTimer = 0f;
+    private boolean motionSeen;
+    private boolean breakReported;
 
     public NewtonsCradleGame(PlatformBridge bridge) { this.bridge = bridge; }
 
@@ -117,6 +122,15 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         autoTimer += dt;
         if(grabbed<0 && autoTimer>4.5f && allQuiet()) { theta[0]=-0.72f; omega[0]=0; autoTimer=0; }
         stepPhysics(dt);
+        boolean quiet = allQuiet();
+        if (!quiet) {
+            motionSeen = true;
+            breakReported = false;
+        } else if (motionSeen && !breakReported) {
+            breakReported = true;
+            motionSeen = false;
+            if (bridge != null) bridge.naturalBreak();
+        }
         updateTransforms();
 
         Gdx.gl.glViewport(0,0,Gdx.graphics.getWidth(),Gdx.graphics.getHeight());
