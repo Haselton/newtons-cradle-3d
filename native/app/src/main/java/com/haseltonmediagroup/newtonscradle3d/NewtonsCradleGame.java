@@ -59,8 +59,10 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         studyBackground = new Texture(Gdx.files.internal("study_background.jpg"));
         studyBackground.setFilter(Texture.TextureFilter.Linear,Texture.TextureFilter.Linear);
         camera = new PerspectiveCamera(42f, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camera.position.set(0f, 1.62f, 20.4f);
-        camera.lookAt(0f, 1.35f, -.25f);
+        // A restrained three-quarter view matches the desk photograph's
+        // perspective while keeping both end balls easy to grab.
+        camera.position.set(1.45f, 1.90f, 20.2f);
+        camera.lookAt(0f, 1.28f, -.20f);
         camera.near = 0.1f; camera.far = 100f; camera.update();
 
         env = new Environment();
@@ -200,6 +202,12 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         addRod(new Vector3( 2.82f,-0.56f, .92f),new Vector3( 2.82f,3.43f, .92f),.088f);
         addRod(new Vector3(-2.82f,3.43f,-.92f),new Vector3(2.82f,3.43f,-.92f),.088f);
         addRod(new Vector3(-2.82f,3.43f, .92f),new Vector3(2.82f,3.43f, .92f),.088f);
+        // Open lower rails and transverse feet replace the flat black slab so
+        // the frame visibly rests on the photographed desktop.
+        addRod(new Vector3(-2.82f,-.56f,-.92f),new Vector3(2.82f,-.56f,-.92f),.105f);
+        addRod(new Vector3(-2.82f,-.56f, .92f),new Vector3(2.82f,-.56f, .92f),.105f);
+        addRod(new Vector3(-2.82f,-.68f,-1.24f),new Vector3(-2.82f,-.68f,1.24f),.13f);
+        addRod(new Vector3( 2.82f,-.68f,-1.24f),new Vector3( 2.82f,-.68f,1.24f),.13f);
     }
 
     private void addRod(Vector3 a, Vector3 b, float diameter){
@@ -232,11 +240,18 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT|GL20.GL_DEPTH_BUFFER_BIT);
         backgroundBatch.getProjectionMatrix().setToOrtho2D(0,0,Gdx.graphics.getWidth(),Gdx.graphics.getHeight());
         backgroundBatch.begin();
-        backgroundBatch.draw(studyBackground,0,0,Gdx.graphics.getWidth(),Gdx.graphics.getHeight());
+        // Aspect-fill instead of stretching: preserve the room's perspective
+        // and crop equal amounts from the left and right on narrow phones.
+        float bgHeight=Gdx.graphics.getHeight();
+        float bgWidth=bgHeight*studyBackground.getWidth()/(float)studyBackground.getHeight();
+        if(bgWidth<Gdx.graphics.getWidth()){
+            bgWidth=Gdx.graphics.getWidth();
+            bgHeight=bgWidth*studyBackground.getHeight()/(float)studyBackground.getWidth();
+        }
+        backgroundBatch.draw(studyBackground,(Gdx.graphics.getWidth()-bgWidth)*.5f,(Gdx.graphics.getHeight()-bgHeight)*.5f,bgWidth,bgHeight);
         backgroundBatch.end();
         Gdx.gl.glClear(GL20.GL_DEPTH_BUFFER_BIT);
         batch.begin(camera);
-        batch.render(floor,env);
         for(ModelInstance s:shadows) batch.render(s);
         for(ModelInstance m:frame) batch.render(m,env);
         for(ModelInstance s:strings) batch.render(s,env);
