@@ -18,11 +18,10 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private PerspectiveCamera camera;
     private ModelBatch batch;
     private Environment env;
-    private Model sphereModel, beamModel, stringModel, floorModel, accentModel;
+    private Model sphereModel, beamModel, stringModel, floorModel;
     private final Array<ModelInstance> balls = new Array<>();
     private final Array<ModelInstance> strings = new Array<>();
     private final Array<ModelInstance> frame = new Array<>();
-    private final Array<ModelInstance> accents = new Array<>();
     private ModelInstance floor;
     private Sound impactSound;
     private long lastImpactMs;
@@ -61,19 +60,17 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
                 ColorAttribute.createDiffuse(new Color(0.40f, 0.44f, 0.50f, 1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
                 FloatAttribute.createShininess(128f));
-        Material darkMetal = new Material(
-                ColorAttribute.createDiffuse(new Color(0.055f,0.06f,0.075f,1f)),
-                ColorAttribute.createSpecular(new Color(0.5f,0.52f,0.56f,1f)),
-                FloatAttribute.createShininess(48f));
+        Material frameChrome = new Material(
+                ColorAttribute.createDiffuse(new Color(0.30f,0.33f,0.38f,1f)),
+                ColorAttribute.createSpecular(Color.WHITE),
+                FloatAttribute.createShininess(112f));
         Material cord = new Material(ColorAttribute.createDiffuse(new Color(0.55f,0.58f,0.62f,1f)), ColorAttribute.createSpecular(Color.WHITE), FloatAttribute.createShininess(48f));
-        Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.075f,0.035f,0.018f,1f)), ColorAttribute.createSpecular(new Color(.20f,.12f,.07f,1f)), FloatAttribute.createShininess(30f));
-        Material accent = new Material(ColorAttribute.createDiffuse(new Color(0.38f,0.25f,0.08f,1f)), ColorAttribute.createSpecular(new Color(.95f,.72f,.28f,1f)), FloatAttribute.createShininess(80f));
+        Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.018f,0.020f,0.024f,1f)), ColorAttribute.createSpecular(new Color(.32f,.35f,.40f,1f)), FloatAttribute.createShininess(64f));
 
         sphereModel = mb.createSphere(R*2, R*2, R*2, 64, 64, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        beamModel = mb.createBox(1f,1f,1f, darkMetal, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        beamModel = mb.createBox(1f,1f,1f, frameChrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         stringModel = mb.createCylinder(0.024f,1f,0.024f,16,cord,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         floorModel = mb.createBox(14f,0.3f,8f,floorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        accentModel = mb.createBox(1f,1f,1f,accent,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
 
         floor = new ModelInstance(floorModel); floor.transform.setToTranslation(0f,-0.72f,0f);
         makeFrame();
@@ -82,14 +79,14 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
             strings.add(new ModelInstance(stringModel));
             strings.add(new ModelInstance(stringModel));
         }
-        impactSound = Gdx.audio.newSound(Gdx.files.internal("newton_impact.mp3"));
+        try { impactSound = Gdx.audio.newSound(Gdx.files.internal("newton_impact.mp3")); }
+        catch (RuntimeException ignored) { impactSound = null; }
         Gdx.input.setInputProcessor(this);
         reset();
     }
 
     private void makeFrame() {
         frame.clear();
-        accents.clear();
         addBeam(0,-0.45f,0,6.8f,0.38f,2.75f);
         addBeam(-3.10f,1.42f,-1.02f,0.25f,4.15f,0.25f);
         addBeam(-3.10f,1.42f,1.02f,0.25f,4.15f,0.25f);
@@ -99,20 +96,12 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         addBeam(0,3.48f,1.02f,6.45f,0.24f,0.24f);
         addBeam(0,-0.20f,-1.10f,6.45f,0.18f,0.18f);
         addBeam(0,-0.20f,1.10f,6.45f,0.18f,0.18f);
-        addAccent(0,-0.235f,-1.285f,5.8f,0.025f,0.035f);
-        addAccent(0,-0.235f,1.285f,5.8f,0.025f,0.035f);
     }
 
     private void addBeam(float x,float y,float z,float sx,float sy,float sz){
         ModelInstance m=new ModelInstance(beamModel);
         m.transform.setToTranslation(x,y,z).scale(sx,sy,sz);
         frame.add(m);
-    }
-
-    private void addAccent(float x,float y,float z,float sx,float sy,float sz){
-        ModelInstance m=new ModelInstance(accentModel);
-        m.transform.setToTranslation(x,y,z).scale(sx,sy,sz);
-        accents.add(m);
     }
 
     private float baseX(int i){ return (i-(N-1)/2f)*SPACING; }
@@ -136,7 +125,6 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         batch.begin(camera);
         batch.render(floor,env);
         for(ModelInstance m:frame) batch.render(m,env);
-        for(ModelInstance m:accents) batch.render(m,env);
         for(ModelInstance s:strings) batch.render(s,env);
         for(ModelInstance b:balls) batch.render(b,env);
         batch.end();
@@ -165,8 +153,10 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
                     if(strength>0.08f && now-lastImpactMs>=55L) {
                         lastImpactMs=now;
                         float volume=0.18f+strength*0.72f;
-                        long id=impactSound.play(volume);
-                        impactSound.setPitch(id,0.96f+MathUtils.random()*0.08f);
+                        if (impactSound != null) {
+                            long id=impactSound.play(volume);
+                            impactSound.setPitch(id,0.96f+MathUtils.random()*0.08f);
+                        }
                         if(bridge!=null) bridge.impact(strength);
                     }
                 }
@@ -210,5 +200,5 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public boolean touchCancelled(int x,int y,int pointer,int button){grabbed=-1;return true;}
 
     @Override public void resize(int w,int h){ camera.viewportWidth=w;camera.viewportHeight=h;camera.update(); }
-    @Override public void dispose(){ batch.dispose(); sphereModel.dispose(); beamModel.dispose(); stringModel.dispose(); floorModel.dispose(); accentModel.dispose(); if(impactSound!=null) impactSound.dispose(); }
+    @Override public void dispose(){ batch.dispose(); sphereModel.dispose(); beamModel.dispose(); stringModel.dispose(); floorModel.dispose(); if(impactSound!=null) impactSound.dispose(); }
 }
