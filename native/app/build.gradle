@@ -7,11 +7,17 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.haseltonmediagroup.newtonscradle3d.blackchrome'
+        applicationId 'com.haseltonmediagroup.newtonscradle3d'
         minSdk 26
         targetSdk 35
-        versionCode 5
-        versionName '1.0.4-black-chrome-test'
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
     }
 
     compileOptions {
@@ -26,6 +32,8 @@ dependencies {
     natives 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-arm64-v8a'
     natives 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-armeabi-v7a'
     natives 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86_64'
+    implementation 'com.google.android.gms:play-services-ads:25.4.0'
+    implementation 'com.google.android.ump:user-messaging-platform:4.0.0'
 }
 
 tasks.register('copyAndroidNatives') {
