@@ -1,361 +1,366 @@
 package com.haseltonmediagroup.newtonscradle3d;
 
 import android.content.Context;
-import android.graphics.Canvas;
-import android.graphics.LinearGradient;
-import android.graphics.Paint;
-import android.graphics.Path;
-import android.graphics.RadialGradient;
-import android.graphics.Shader;
-import android.os.SystemClock;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
+import android.opengl.GLES20;
+import android.opengl.GLSurfaceView;
+import android.opengl.Matrix;
 import android.view.MotionEvent;
-import android.view.View;
 
-public class CradleView extends View {
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.nio.ShortBuffer;
+
+public class CradleView extends GLSurfaceView {
     public interface ImpactListener { void onImpact(float strength); }
 
-    private static final int BALLS = 5;
-    private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final float[] angle = new float[BALLS];
-    private final float[] omega = new float[BALLS];
-    private final Vibrator vibrator;
-    private final ImpactListener impactListener;
-
-    private long lastNs;
-    private long lastImpactMs;
-    private boolean running = true;
+    private final SceneRenderer renderer;
     private int activeBall = -1;
 
     public CradleView(Context context, ImpactListener impactListener) {
         super(context);
-        this.impactListener = impactListener;
-        vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-        linePaint.setStrokeCap(Paint.Cap.ROUND);
+        setEGLContextClientVersion(2);
+        setPreserveEGLContextOnPause(true);
+        renderer = new SceneRenderer(impactListener);
+        setRenderer(renderer);
+        setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
         setKeepScreenOn(true);
-        lastNs = System.nanoTime();
     }
 
-    public void resume() {
-        running = true;
-        lastNs = System.nanoTime();
-        postInvalidateOnAnimation();
-    }
-
-    public void pause() { running = false; }
-
-    @Override
-    protected void onDraw(Canvas c) {
-        super.onDraw(c);
-        float w = getWidth();
-        float h = getHeight();
-        drawRoom(c, w, h);
-        if (running) updatePhysics();
-        drawCradle(c, w, h);
-        if (running) postInvalidateOnAnimation();
-    }
-
-    private void drawRoom(Canvas c, float w, float h) {
-        paint.setShader(new LinearGradient(0, 0, 0, h,
-                new int[]{0xff15100c, 0xff090b0f, 0xff020305},
-                new float[]{0f, .54f, 1f}, Shader.TileMode.CLAMP));
-        c.drawRect(0, 0, w, h, paint);
-        paint.setShader(null);
-
-        paint.setShader(new RadialGradient(w * .74f, h * .28f, w * .68f,
-                new int[]{0x335f4630, 0x14261d17, 0x00000000},
-                new float[]{0f, .48f, 1f}, Shader.TileMode.CLAMP));
-        c.drawCircle(w * .74f, h * .28f, w * .68f, paint);
-        paint.setShader(null);
-
-        paint.setShader(new LinearGradient(0, h * .70f, 0, h,
-                new int[]{0xff151312, 0xff050506}, null, Shader.TileMode.CLAMP));
-        c.drawRect(0, h * .70f, w, h, paint);
-        paint.setShader(null);
-
-        // Soft reflection pool beneath the base.
-        paint.setShader(new RadialGradient(w * .5f, h * .80f, w * .42f,
-                new int[]{0x223e2d1f, 0x11000000, 0x00000000}, null, Shader.TileMode.CLAMP));
-        c.save();
-        c.scale(1f, .23f, w * .5f, h * .80f);
-        c.drawCircle(w * .5f, h * .80f, w * .42f, paint);
-        c.restore();
-        paint.setShader(null);
-    }
-
-    private void drawCradle(Canvas c, float w, float h) {
-        float cx = w * .5f;
-        float topY = h * .175f;
-        float baseTop = h * .705f;
-        float frameHalf = w * .355f;
-        float depthX = w * .038f;
-        float depthY = h * .018f;
-
-        drawWoodBase(c, cx, baseTop, w, h, depthX, depthY);
-
-        // Rear chrome rails for depth.
-        drawChromeRail(c, cx - frameHalf + depthX, topY + depthY,
-                cx - frameHalf + depthX, baseTop + depthY, w * .013f, true);
-        drawChromeRail(c, cx + frameHalf + depthX, topY + depthY,
-                cx + frameHalf + depthX, baseTop + depthY, w * .013f, true);
-        drawChromeRail(c, cx - frameHalf + depthX, topY + depthY,
-                cx + frameHalf + depthX, topY + depthY, w * .015f, true);
-
-        float ballR = w * .058f;
-        float spacing = ballR * 2.02f;
-        float ropeLen = h * .342f;
-        float startX = cx - spacing * 2f;
-
-        // Back suspension wires.
-        for (int i = 0; i < BALLS; i++) {
-            float anchorX = startX + spacing * i;
-            float a = angle[i];
-            float bx = anchorX + (float)Math.sin(a) * ropeLen;
-            float by = topY + (float)Math.cos(a) * ropeLen;
-            linePaint.setColor(0xff5d6268);
-            linePaint.setStrokeWidth(Math.max(1.2f, w * .0022f));
-            c.drawLine(anchorX + ballR * .22f + depthX * .50f, topY + depthY,
-                    bx + ballR * .22f, by - ballR * .17f, linePaint);
-        }
-
-        // Front wires and balls.
-        for (int i = 0; i < BALLS; i++) {
-            float anchorX = startX + spacing * i;
-            float a = angle[i];
-            float bx = anchorX + (float)Math.sin(a) * ropeLen;
-            float by = topY + (float)Math.cos(a) * ropeLen;
-
-            linePaint.setColor(0xffc7c7c5);
-            linePaint.setStrokeWidth(Math.max(1.4f, w * .0025f));
-            c.drawLine(anchorX - ballR * .22f, topY + 3f,
-                    bx - ballR * .22f, by - ballR * .17f, linePaint);
-
-            drawSphereShadow(c, bx, by, ballR);
-            drawChromeSphere(c, bx, by, ballR);
-        }
-
-        // Front chrome rails create believable occlusion.
-        drawChromeRail(c, cx - frameHalf, topY, cx - frameHalf, baseTop, w * .014f, false);
-        drawChromeRail(c, cx + frameHalf, topY, cx + frameHalf, baseTop, w * .014f, false);
-        drawChromeRail(c, cx - frameHalf, topY, cx + frameHalf, topY, w * .016f, false);
-
-        paint.setTextAlign(Paint.Align.CENTER);
-        paint.setColor(0xffe8dfd2);
-        paint.setTextSize(w * .050f);
-        paint.setFakeBoldText(true);
-        c.drawText("NEWTON'S CRADLE 3D", cx, h * .855f, paint);
-        paint.setFakeBoldText(false);
-        paint.setColor(0xffb89a72);
-        paint.setTextSize(w * .027f);
-        c.drawText("RELAX  •  FOCUS  •  BALANCE", cx, h * .895f, paint);
-        paint.setColor(0x99ffffff);
-        paint.setTextSize(w * .027f);
-        c.drawText("Grab either outer ball and release", cx, h * .940f, paint);
-    }
-
-    private void drawWoodBase(Canvas c, float cx, float y, float w, float h, float dx, float dy) {
-        float half = w * .405f;
-        float bh = h * .072f;
-
-        Path top = new Path();
-        top.moveTo(cx - half, y);
-        top.lineTo(cx + half, y);
-        top.lineTo(cx + half + dx, y + dy);
-        top.lineTo(cx - half + dx, y + dy);
-        top.close();
-        paint.setShader(new LinearGradient(cx - half, y, cx + half, y + dy,
-                new int[]{0xff3a2113, 0xff6b3c1e, 0xff2a160d}, null, Shader.TileMode.CLAMP));
-        c.drawPath(top, paint);
-
-        paint.setShader(new LinearGradient(0, y, 0, y + bh,
-                new int[]{0xff5b321a, 0xff2f180d, 0xff160b07}, null, Shader.TileMode.CLAMP));
-        c.drawRoundRect(cx - half, y, cx + half, y + bh, w * .018f, w * .018f, paint);
-        paint.setShader(null);
-
-        // Fine wood grain.
-        linePaint.setStrokeWidth(1.1f);
-        linePaint.setColor(0x334f2815);
-        for (int i = 0; i < 8; i++) {
-            float yy = y + bh * (.18f + i * .085f);
-            c.drawLine(cx - half + w * .02f, yy, cx + half - w * .02f, yy + (i % 2 == 0 ? 2f : -2f), linePaint);
-        }
-
-        // Brass name plate.
-        float pw = w * .34f;
-        float ph = h * .027f;
-        paint.setShader(new LinearGradient(cx - pw / 2f, y + bh * .35f, cx + pw / 2f, y + bh * .35f,
-                new int[]{0xff8b6a40, 0xffd4b37a, 0xff7d5b35}, null, Shader.TileMode.CLAMP));
-        c.drawRoundRect(cx - pw / 2f, y + bh * .30f, cx + pw / 2f, y + bh * .30f + ph, 8f, 8f, paint);
-        paint.setShader(null);
-        paint.setTextAlign(Paint.Align.CENTER);
-        paint.setColor(0xff20160f);
-        paint.setTextSize(w * .020f);
-        c.drawText("NEWTON'S CRADLE", cx, y + bh * .30f + ph * .72f, paint);
-    }
-
-    private void drawChromeRail(Canvas c, float x1, float y1, float x2, float y2, float width, boolean rear) {
-        linePaint.setStrokeWidth(width);
-        linePaint.setShader(new LinearGradient(x1, y1, x2 + 1f, y2 + 1f,
-                rear ? new int[]{0xff5f5a54, 0xff2c2d30, 0xff8b8378}
-                     : new int[]{0xfff2eee8, 0xff8f9298, 0xff34383d, 0xfffaf8f2},
-                null, Shader.TileMode.CLAMP));
-        c.drawLine(x1, y1, x2, y2, linePaint);
-        linePaint.setShader(null);
-    }
-
-    private void drawSphereShadow(Canvas c, float x, float y, float r) {
-        paint.setShader(new RadialGradient(x + r * .18f, y + r * .30f, r * 1.15f,
-                new int[]{0x77000000, 0x22000000, 0x00000000}, null, Shader.TileMode.CLAMP));
-        c.drawCircle(x + r * .17f, y + r * .28f, r * 1.15f, paint);
-        paint.setShader(null);
-    }
-
-    private void drawChromeSphere(Canvas c, float x, float y, float r) {
-        paint.setShader(new RadialGradient(x - r * .34f, y - r * .39f, r * 1.48f,
-                new int[]{0xffffffff, 0xffeee9df, 0xffb8bdc3, 0xff737982, 0xff252a30, 0xff080a0d},
-                new float[]{0f, .10f, .28f, .48f, .76f, 1f}, Shader.TileMode.CLAMP));
-        c.drawCircle(x, y, r, paint);
-        paint.setShader(null);
-
-        // Warm room reflection band.
-        paint.setShader(new LinearGradient(x, y - r * .25f, x, y + r * .22f,
-                new int[]{0x10ffffff, 0x66583a22, 0x22301e13, 0x08ffffff},
-                new float[]{0f, .36f, .66f, 1f}, Shader.TileMode.CLAMP));
-        c.drawOval(x - r * .82f, y - r * .20f, x + r * .82f, y + r * .22f, paint);
-        paint.setShader(null);
-
-        paint.setColor(0xccffffff);
-        c.drawCircle(x - r * .34f, y - r * .38f, r * .105f, paint);
-        paint.setColor(0x55ffffff);
-        c.drawCircle(x - r * .16f, y - r * .20f, r * .060f, paint);
-
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(Math.max(1.0f, r * .035f));
-        paint.setColor(0x55ffffff);
-        c.drawCircle(x, y, r * .95f, paint);
-        paint.setStyle(Paint.Style.FILL);
-    }
-
-    private void updatePhysics() {
-        long now = System.nanoTime();
-        float dt = Math.min(.025f, Math.max(.001f, (now - lastNs) / 1_000_000_000f));
-        lastNs = now;
-
-        int subSteps = 6;
-        float h = dt / subSteps;
-        for (int s = 0; s < subSteps; s++) {
-            stepPendulum(0, h);
-            stepPendulum(BALLS - 1, h);
-
-            // Center balls stay seated and visually touching; energy is transferred through them.
-            for (int i = 1; i < BALLS - 1; i++) {
-                angle[i] = 0f;
-                omega[i] = 0f;
-            }
-
-            if (activeBall != 0 && angle[0] >= -0.006f && omega[0] > .035f) {
-                float incoming = omega[0];
-                angle[0] = 0f;
-                omega[0] = 0f;
-                angle[BALLS - 1] = 0f;
-                omega[BALLS - 1] = incoming * .988f;
-                impact(Math.min(1f, Math.abs(incoming) / 1.85f));
-            }
-
-            if (activeBall != BALLS - 1 && angle[BALLS - 1] <= .006f && omega[BALLS - 1] < -.035f) {
-                float incoming = omega[BALLS - 1];
-                angle[BALLS - 1] = 0f;
-                omega[BALLS - 1] = 0f;
-                angle[0] = 0f;
-                omega[0] = incoming * .988f;
-                impact(Math.min(1f, Math.abs(incoming) / 1.85f));
-            }
-        }
-    }
-
-    private void stepPendulum(int i, float dt) {
-        if (i == activeBall) return;
-        float alpha = -(9.81f / 1.85f) * (float)Math.sin(angle[i]) - omega[i] * .014f;
-        omega[i] += alpha * dt;
-        angle[i] += omega[i] * dt;
-        if (Math.abs(angle[i]) < .00025f && Math.abs(omega[i]) < .0025f) {
-            angle[i] = 0f;
-            omega[i] = 0f;
-        }
-    }
-
-    private void impact(float strength) {
-        long now = SystemClock.uptimeMillis();
-        if (now - lastImpactMs < 72 || strength < .07f) return;
-        lastImpactMs = now;
-
-        if (impactListener != null) impactListener.onImpact(strength);
-
-        if (vibrator != null && vibrator.hasVibrator() && android.os.Build.VERSION.SDK_INT >= 26) {
-            int amplitude = 38 + (int)(strength * 100f);
-            vibrator.vibrate(VibrationEffect.createOneShot(strength > .55f ? 12 : 6, amplitude));
-        }
-    }
+    public void resume() { onResume(); }
+    public void pause() { onPause(); }
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
-        float w = getWidth();
-        float h = getHeight();
-        float cx = w * .5f;
-        float topY = h * .175f;
-        float ballR = w * .058f;
-        float spacing = ballR * 2.02f;
-        float startX = cx - spacing * 2f;
-        float ropeLen = h * .342f;
+        final float nx = e.getX() / Math.max(1f, getWidth());
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                activeBall = nx < .5f ? 0 : 4;
+                queueEvent(() -> renderer.beginDrag(activeBall));
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                if (activeBall >= 0) {
+                    final int ball = activeBall;
+                    queueEvent(() -> renderer.drag(ball, nx));
+                }
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (activeBall >= 0) {
+                    final int ball = activeBall;
+                    queueEvent(() -> renderer.endDrag(ball));
+                }
+                activeBall = -1;
+                return true;
+            default:
+                return true;
+        }
+    }
 
-        if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
-            int nearest = -1;
-            float best = Float.MAX_VALUE;
-            float touchRadius = ballR * 3.15f;
+    private static class SceneRenderer implements GLSurfaceView.Renderer {
+        private final ImpactListener impactListener;
+        private final float[] projection = new float[16];
+        private final float[] view = new float[16];
+        private final float[] model = new float[16];
+        private final float[] mv = new float[16];
+        private final float[] mvp = new float[16];
+        private final float[] angle = new float[5];
+        private final float[] omega = new float[5];
 
-            for (int i : new int[]{0, BALLS - 1}) {
-                float anchorX = startX + spacing * i;
-                float bx = anchorX + (float)Math.sin(angle[i]) * ropeLen;
-                float by = topY + (float)Math.cos(angle[i]) * ropeLen;
-                float dx = e.getX() - bx;
-                float dy = e.getY() - by;
-                float d2 = dx * dx + dy * dy;
-                if (d2 < best && d2 < touchRadius * touchRadius) {
-                    best = d2;
-                    nearest = i;
+        private Mesh sphere;
+        private Mesh cube;
+        private int program;
+        private int aPos, aNormal, uMvp, uModel, uColor, uMetallic;
+        private long lastNs;
+        private long lastImpactNs;
+        private int dragged = -1;
+
+        SceneRenderer(ImpactListener impactListener) {
+            this.impactListener = impactListener;
+        }
+
+        @Override
+        public void onSurfaceCreated(javax.microedition.khronos.egl.EGLConfig config) {
+            GLES20.glClearColor(0.018f, 0.020f, 0.025f, 1f);
+            GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+            GLES20.glEnable(GLES20.GL_CULL_FACE);
+            GLES20.glCullFace(GLES20.GL_BACK);
+            program = buildProgram(VERTEX_SHADER, FRAGMENT_SHADER);
+            aPos = GLES20.glGetAttribLocation(program, "aPos");
+            aNormal = GLES20.glGetAttribLocation(program, "aNormal");
+            uMvp = GLES20.glGetUniformLocation(program, "uMvp");
+            uModel = GLES20.glGetUniformLocation(program, "uModel");
+            uColor = GLES20.glGetUniformLocation(program, "uColor");
+            uMetallic = GLES20.glGetUniformLocation(program, "uMetallic");
+            sphere = makeSphere(28, 20);
+            cube = makeCube();
+            lastNs = System.nanoTime();
+        }
+
+        @Override
+        public void onSurfaceChanged(javax.microedition.khronos.opengles.GL10 gl, int width, int height) {
+            GLES20.glViewport(0, 0, width, height);
+            float aspect = width / (float)Math.max(1, height);
+            Matrix.perspectiveM(projection, 0, 38f, aspect, .1f, 30f);
+            Matrix.setLookAtM(view, 0, 0f, .15f, 8.7f, 0f, -.3f, 0f, 0f, 1f, 0f);
+        }
+
+        @Override
+        public void onDrawFrame(javax.microedition.khronos.opengles.GL10 gl) {
+            updatePhysics();
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
+            GLES20.glUseProgram(program);
+
+            drawBox(0f, -2.64f, .45f, 5.8f, .08f, 4.0f, .055f, .047f, .040f, .05f);
+            drawBox(0f, -2.28f, 0f, 4.15f, .46f, 1.68f, .24f, .105f, .045f, .12f);
+            drawBox(0f, -2.03f, -.03f, 4.0f, .10f, 1.55f, .48f, .23f, .09f, .08f);
+
+            float railX = 2.18f;
+            drawBox(-railX, -.10f, -.58f, .11f, 4.35f, .11f, .68f, .70f, .72f, .85f);
+            drawBox( railX, -.10f, -.58f, .11f, 4.35f, .11f, .68f, .70f, .72f, .85f);
+            drawBox(0f, 2.08f, -.58f, 4.45f, .11f, .11f, .68f, .70f, .72f, .85f);
+            drawBox(-railX, -.10f, .58f, .11f, 4.35f, .11f, .86f, .88f, .90f, 1.0f);
+            drawBox( railX, -.10f, .58f, .11f, 4.35f, .11f, .86f, .88f, .90f, 1.0f);
+            drawBox(0f, 2.08f, .58f, 4.45f, .11f, .11f, .86f, .88f, .90f, 1.0f);
+
+            float anchorY = 1.94f;
+            float ropeLen = 2.18f;
+            float spacing = .74f;
+            float startX = -spacing * 2f;
+            float radius = .365f;
+
+            for (int i = 0; i < 5; i++) {
+                float ax = startX + i * spacing;
+                float bx = ax + (float)Math.sin(angle[i]) * ropeLen;
+                float by = anchorY - (float)Math.cos(angle[i]) * ropeLen;
+                drawLine(ax - .10f, anchorY, .48f, bx - .10f, by + .08f, .18f);
+                drawLine(ax + .10f, anchorY, -.48f, bx + .10f, by + .08f, -.18f);
+            }
+
+            for (int i = 0; i < 5; i++) {
+                float ax = startX + i * spacing;
+                float bx = ax + (float)Math.sin(angle[i]) * ropeLen;
+                float by = anchorY - (float)Math.cos(angle[i]) * ropeLen;
+                drawSphere(bx, by, 0f, radius, .72f, .75f, .79f, 1.0f);
+            }
+
+            drawBox(0f, -2.17f, .86f, 1.38f, .21f, .03f, .68f, .46f, .18f, .50f);
+        }
+
+        void beginDrag(int ball) {
+            dragged = ball;
+            omega[ball] = 0f;
+        }
+
+        void drag(int ball, float nx) {
+            dragged = ball;
+            if (ball == 0) {
+                float amount = Math.max(0f, Math.min(1f, (.52f - nx) / .46f));
+                angle[0] = -amount * 1.06f;
+            } else {
+                float amount = Math.max(0f, Math.min(1f, (nx - .48f) / .46f));
+                angle[4] = amount * 1.06f;
+            }
+            omega[ball] = 0f;
+        }
+
+        void endDrag(int ball) {
+            dragged = -1;
+        }
+
+        private void updatePhysics() {
+            long now = System.nanoTime();
+            float dt = Math.min(.030f, Math.max(.001f, (now - lastNs) / 1_000_000_000f));
+            lastNs = now;
+            int steps = 6;
+            float h = dt / steps;
+            for (int s = 0; s < steps; s++) {
+                stepPendulum(0, h);
+                stepPendulum(4, h);
+                angle[1] = angle[2] = angle[3] = 0f;
+                omega[1] = omega[2] = omega[3] = 0f;
+
+                if (dragged != 0 && angle[0] >= -0.0035f && omega[0] > .03f) {
+                    float incoming = omega[0];
+                    angle[0] = 0f;
+                    omega[0] = 0f;
+                    angle[4] = 0f;
+                    omega[4] = incoming * .985f;
+                    impact(Math.min(1f, Math.abs(incoming) / 1.9f));
+                }
+                if (dragged != 4 && angle[4] <= .0035f && omega[4] < -.03f) {
+                    float incoming = omega[4];
+                    angle[4] = 0f;
+                    omega[4] = 0f;
+                    angle[0] = 0f;
+                    omega[0] = incoming * .985f;
+                    impact(Math.min(1f, Math.abs(incoming) / 1.9f));
                 }
             }
+        }
 
-            // Extra thumb lanes make the end balls easy to grab even when the thumb obscures them.
-            float restingY = topY + ropeLen;
-            if (nearest < 0 && Math.abs(e.getY() - restingY) < ballR * 2.4f) {
-                if (e.getX() < w * .27f) nearest = 0;
-                else if (e.getX() > w * .73f) nearest = BALLS - 1;
+        private void stepPendulum(int i, float dt) {
+            if (dragged == i) return;
+            float alpha = -(9.81f / 1.72f) * (float)Math.sin(angle[i]) - omega[i] * .020f;
+            omega[i] += alpha * dt;
+            angle[i] += omega[i] * dt;
+            if (Math.abs(angle[i]) < .0002f && Math.abs(omega[i]) < .002f) {
+                angle[i] = 0f;
+                omega[i] = 0f;
             }
-
-            activeBall = nearest;
-            if (activeBall >= 0) omega[activeBall] = 0f;
-            return true;
         }
 
-        if (e.getActionMasked() == MotionEvent.ACTION_MOVE && activeBall >= 0) {
-            float anchorX = startX + spacing * activeBall;
-            float ratio = Math.max(-.90f, Math.min(.90f, (e.getX() - anchorX) / ropeLen));
-            float a = (float)Math.asin(ratio);
-            if (activeBall == 0) a = Math.min(0f, a);
-            else a = Math.max(0f, a);
-            angle[activeBall] = Math.max(-1.08f, Math.min(1.08f, a));
-            omega[activeBall] = 0f;
-            invalidate();
-            return true;
+        private void impact(float strength) {
+            long now = System.nanoTime();
+            if (now - lastImpactNs < 55_000_000L) return;
+            lastImpactNs = now;
+            if (impactListener != null) impactListener.onImpact(Math.max(.22f, strength));
         }
 
-        if (e.getActionMasked() == MotionEvent.ACTION_UP || e.getActionMasked() == MotionEvent.ACTION_CANCEL) {
-            activeBall = -1;
-            return true;
+        private void drawSphere(float x, float y, float z, float s, float r, float g, float b, float metal) {
+            Matrix.setIdentityM(model, 0);
+            Matrix.translateM(model, 0, x, y, z);
+            Matrix.scaleM(model, 0, s, s, s);
+            drawMesh(sphere, r, g, b, metal);
         }
-        return true;
+
+        private void drawBox(float x, float y, float z, float sx, float sy, float sz, float r, float g, float b, float metal) {
+            Matrix.setIdentityM(model, 0);
+            Matrix.translateM(model, 0, x, y, z);
+            Matrix.scaleM(model, 0, sx, sy, sz);
+            drawMesh(cube, r, g, b, metal);
+        }
+
+        private void drawMesh(Mesh mesh, float r, float g, float b, float metal) {
+            Matrix.multiplyMM(mv, 0, view, 0, model, 0);
+            Matrix.multiplyMM(mvp, 0, projection, 0, mv, 0);
+            GLES20.glUniformMatrix4fv(uMvp, 1, false, mvp, 0);
+            GLES20.glUniformMatrix4fv(uModel, 1, false, model, 0);
+            GLES20.glUniform4f(uColor, r, g, b, 1f);
+            GLES20.glUniform1f(uMetallic, metal);
+            mesh.vertices.position(0);
+            GLES20.glVertexAttribPointer(aPos, 3, GLES20.GL_FLOAT, false, 24, mesh.vertices);
+            GLES20.glEnableVertexAttribArray(aPos);
+            mesh.vertices.position(3);
+            GLES20.glVertexAttribPointer(aNormal, 3, GLES20.GL_FLOAT, false, 24, mesh.vertices);
+            GLES20.glEnableVertexAttribArray(aNormal);
+            GLES20.glDrawElements(GLES20.GL_TRIANGLES, mesh.indexCount, GLES20.GL_UNSIGNED_SHORT, mesh.indices);
+        }
+
+        private void drawLine(float x1, float y1, float z1, float x2, float y2, float z2) {
+            float[] v = {x1,y1,z1, 0,1,0, x2,y2,z2, 0,1,0};
+            FloatBuffer fb = ByteBuffer.allocateDirect(v.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+            fb.put(v).position(0);
+            Matrix.setIdentityM(model, 0);
+            Matrix.multiplyMM(mv, 0, view, 0, model, 0);
+            Matrix.multiplyMM(mvp, 0, projection, 0, mv, 0);
+            GLES20.glUniformMatrix4fv(uMvp, 1, false, mvp, 0);
+            GLES20.glUniformMatrix4fv(uModel, 1, false, model, 0);
+            GLES20.glUniform4f(uColor, .64f, .67f, .71f, 1f);
+            GLES20.glUniform1f(uMetallic, .8f);
+            fb.position(0);
+            GLES20.glVertexAttribPointer(aPos, 3, GLES20.GL_FLOAT, false, 24, fb);
+            GLES20.glEnableVertexAttribArray(aPos);
+            fb.position(3);
+            GLES20.glVertexAttribPointer(aNormal, 3, GLES20.GL_FLOAT, false, 24, fb);
+            GLES20.glEnableVertexAttribArray(aNormal);
+            GLES20.glLineWidth(2.0f);
+            GLES20.glDrawArrays(GLES20.GL_LINES, 0, 2);
+        }
+
+        private static Mesh makeSphere(int lon, int lat) {
+            int vc = (lon + 1) * (lat + 1);
+            float[] verts = new float[vc * 6];
+            int p = 0;
+            for (int y = 0; y <= lat; y++) {
+                double v = y / (double)lat;
+                double phi = Math.PI * v;
+                for (int x = 0; x <= lon; x++) {
+                    double u = x / (double)lon;
+                    double theta = Math.PI * 2.0 * u;
+                    float sx = (float)(Math.sin(phi) * Math.cos(theta));
+                    float sy = (float)Math.cos(phi);
+                    float sz = (float)(Math.sin(phi) * Math.sin(theta));
+                    verts[p++] = sx; verts[p++] = sy; verts[p++] = sz;
+                    verts[p++] = sx; verts[p++] = sy; verts[p++] = sz;
+                }
+            }
+            short[] idx = new short[lon * lat * 6];
+            int q = 0;
+            for (int y = 0; y < lat; y++) {
+                for (int x = 0; x < lon; x++) {
+                    short a = (short)(y * (lon + 1) + x);
+                    short b = (short)(a + lon + 1);
+                    short c = (short)(a + 1);
+                    short d = (short)(b + 1);
+                    idx[q++] = a; idx[q++] = b; idx[q++] = c;
+                    idx[q++] = c; idx[q++] = b; idx[q++] = d;
+                }
+            }
+            return new Mesh(verts, idx);
+        }
+
+        private static Mesh makeCube() {
+            float[] v = {
+                -0.5f,-0.5f, 0.5f, 0,0,1,   0.5f,-0.5f, 0.5f, 0,0,1,   0.5f,0.5f,0.5f,0,0,1,  -0.5f,0.5f,0.5f,0,0,1,
+                -0.5f,-0.5f,-0.5f,0,0,-1, -0.5f,0.5f,-0.5f,0,0,-1,  0.5f,0.5f,-0.5f,0,0,-1, 0.5f,-0.5f,-0.5f,0,0,-1,
+                -0.5f,0.5f,-0.5f,0,1,0,   -0.5f,0.5f,0.5f,0,1,0,    0.5f,0.5f,0.5f,0,1,0,   0.5f,0.5f,-0.5f,0,1,0,
+                -0.5f,-0.5f,-0.5f,0,-1,0, 0.5f,-0.5f,-0.5f,0,-1,0, 0.5f,-0.5f,0.5f,0,-1,0,-0.5f,-0.5f,0.5f,0,-1,0,
+                0.5f,-0.5f,-0.5f,1,0,0,   0.5f,0.5f,-0.5f,1,0,0,    0.5f,0.5f,0.5f,1,0,0,   0.5f,-0.5f,0.5f,1,0,0,
+                -0.5f,-0.5f,-0.5f,-1,0,0,-0.5f,-0.5f,0.5f,-1,0,0, -0.5f,0.5f,0.5f,-1,0,0,-0.5f,0.5f,-0.5f,-1,0,0
+            };
+            short[] i = {
+                0,1,2,0,2,3, 4,5,6,4,6,7, 8,9,10,8,10,11,
+                12,13,14,12,14,15, 16,17,18,16,18,19, 20,21,22,20,22,23
+            };
+            return new Mesh(v, i);
+        }
+
+        private static int buildProgram(String vs, String fs) {
+            int v = compile(GLES20.GL_VERTEX_SHADER, vs);
+            int f = compile(GLES20.GL_FRAGMENT_SHADER, fs);
+            int p = GLES20.glCreateProgram();
+            GLES20.glAttachShader(p, v);
+            GLES20.glAttachShader(p, f);
+            GLES20.glLinkProgram(p);
+            return p;
+        }
+
+        private static int compile(int type, String src) {
+            int s = GLES20.glCreateShader(type);
+            GLES20.glShaderSource(s, src);
+            GLES20.glCompileShader(s);
+            return s;
+        }
+
+        private static class Mesh {
+            final FloatBuffer vertices;
+            final ShortBuffer indices;
+            final int indexCount;
+            Mesh(float[] v, short[] i) {
+                vertices = ByteBuffer.allocateDirect(v.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+                vertices.put(v).position(0);
+                indices = ByteBuffer.allocateDirect(i.length * 2).order(ByteOrder.nativeOrder()).asShortBuffer();
+                indices.put(i).position(0);
+                indexCount = i.length;
+            }
+        }
+
+        private static final String VERTEX_SHADER =
+                "uniform mat4 uMvp; uniform mat4 uModel;" +
+                "attribute vec3 aPos; attribute vec3 aNormal;" +
+                "varying vec3 vNormal; varying vec3 vWorld;" +
+                "void main(){ vec4 w=uModel*vec4(aPos,1.0); vWorld=w.xyz; vNormal=normalize(mat3(uModel)*aNormal); gl_Position=uMvp*vec4(aPos,1.0); }";
+
+        private static final String FRAGMENT_SHADER =
+                "precision mediump float; uniform vec4 uColor; uniform float uMetallic;" +
+                "varying vec3 vNormal; varying vec3 vWorld;" +
+                "void main(){" +
+                "vec3 N=normalize(vNormal); vec3 L=normalize(vec3(-0.45,0.85,0.65)); vec3 V=normalize(vec3(0.0,0.0,8.5)-vWorld);" +
+                "float d=max(dot(N,L),0.0); vec3 H=normalize(L+V); float spec=pow(max(dot(N,H),0.0), mix(20.0,90.0,uMetallic));" +
+                "float rim=pow(1.0-max(dot(N,V),0.0),2.4);" +
+                "vec3 warm=vec3(1.0,0.68,0.38)*max(dot(N,normalize(vec3(0.7,0.25,0.3))),0.0)*0.16;" +
+                "vec3 c=uColor.rgb*(0.18+0.72*d)+warm+vec3(spec)*(0.3+1.1*uMetallic)+vec3(rim)*0.22*uMetallic;" +
+                "gl_FragColor=vec4(c,1.0); }";
     }
 }
