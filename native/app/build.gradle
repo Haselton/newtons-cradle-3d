@@ -1,28 +1,58 @@
 plugins { id 'com.android.application' }
 
+configurations { natives }
+
 android {
     namespace 'com.haseltonmediagroup.newtonscradle3d'
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.haseltonmediagroup.newtonscradle3d.diagnostic'
+        applicationId 'com.haseltonmediagroup.newtonscradle3d.blackchrome'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '1.0.2-refined'
+        versionCode 6
+        versionName '1.1.0-newton-engine-test'
+        ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
+        externalNativeBuild {
+            cmake { cppFlags '-std=c++17 -O3' }
+        }
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
 }
 
 dependencies {
     implementation 'com.badlogicgames.gdx:gdx:1.13.1'
     implementation 'com.badlogicgames.gdx:gdx-backend-android:1.13.1'
-    implementation 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-arm64-v8a'
-    implementation 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-armeabi-v7a'
-    implementation 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86_64'
-    implementation 'com.google.android.gms:play-services-ads:23.6.0'
+    natives 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-arm64-v8a'
+    natives 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-armeabi-v7a'
+    natives 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86_64'
 }
+
+tasks.register('copyAndroidNatives') {
+    doFirst {
+        file('src/main/jniLibs/arm64-v8a').mkdirs()
+        file('src/main/jniLibs/armeabi-v7a').mkdirs()
+        file('src/main/jniLibs/x86_64').mkdirs()
+        configurations.natives.files.each { jar ->
+            def abi = jar.name.contains('natives-arm64-v8a') ? 'arm64-v8a' :
+                    jar.name.contains('natives-armeabi-v7a') ? 'armeabi-v7a' : 'x86_64'
+            copy {
+                from zipTree(jar)
+                into "src/main/jniLibs/${abi}"
+                include '*.so'
+            }
+        }
+    }
+}
+
+preBuild.dependsOn copyAndroidNatives

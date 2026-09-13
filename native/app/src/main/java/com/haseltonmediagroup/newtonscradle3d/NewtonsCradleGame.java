@@ -18,11 +18,10 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private PerspectiveCamera camera;
     private ModelBatch batch;
     private Environment env;
-    private Model sphereModel, beamModel, stringModel, floorModel, accentModel;
+    private Model sphereModel, beamModel, stringModel, floorModel;
     private final Array<ModelInstance> balls = new Array<>();
     private final Array<ModelInstance> strings = new Array<>();
     private final Array<ModelInstance> frame = new Array<>();
-    private final Array<ModelInstance> accents = new Array<>();
     private ModelInstance floor;
     private Sound impactSound;
     private long lastImpactMs;
@@ -33,9 +32,8 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private static final float PIVOT_Y = 3.15f;
     private static final float SPACING = 0.985f;
     private static final float STRING_Z = 0.48f;
-    private static final float G = 9.81f;
-    private final float[] theta = new float[N];
-    private final float[] omega = new float[N];
+    private final float[] physicsState = new float[N * 3];
+    private boolean nativeReady;
     private int grabbed = -1;
     private float grabStartX;
     private float grabStartTheta;
@@ -61,19 +59,17 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
                 ColorAttribute.createDiffuse(new Color(0.40f, 0.44f, 0.50f, 1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
                 FloatAttribute.createShininess(128f));
-        Material darkMetal = new Material(
-                ColorAttribute.createDiffuse(new Color(0.055f,0.06f,0.075f,1f)),
-                ColorAttribute.createSpecular(new Color(0.5f,0.52f,0.56f,1f)),
-                FloatAttribute.createShininess(48f));
+        Material frameChrome = new Material(
+                ColorAttribute.createDiffuse(new Color(0.30f,0.33f,0.38f,1f)),
+                ColorAttribute.createSpecular(Color.WHITE),
+                FloatAttribute.createShininess(112f));
         Material cord = new Material(ColorAttribute.createDiffuse(new Color(0.55f,0.58f,0.62f,1f)), ColorAttribute.createSpecular(Color.WHITE), FloatAttribute.createShininess(48f));
-        Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.075f,0.035f,0.018f,1f)), ColorAttribute.createSpecular(new Color(.20f,.12f,.07f,1f)), FloatAttribute.createShininess(30f));
-        Material accent = new Material(ColorAttribute.createDiffuse(new Color(0.38f,0.25f,0.08f,1f)), ColorAttribute.createSpecular(new Color(.95f,.72f,.28f,1f)), FloatAttribute.createShininess(80f));
+        Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.018f,0.020f,0.024f,1f)), ColorAttribute.createSpecular(new Color(.32f,.35f,.40f,1f)), FloatAttribute.createShininess(64f));
 
         sphereModel = mb.createSphere(R*2, R*2, R*2, 64, 64, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        beamModel = mb.createBox(1f,1f,1f, darkMetal, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        beamModel = mb.createBox(1f,1f,1f, frameChrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         stringModel = mb.createCylinder(0.024f,1f,0.024f,16,cord,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         floorModel = mb.createBox(14f,0.3f,8f,floorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        accentModel = mb.createBox(1f,1f,1f,accent,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
 
         floor = new ModelInstance(floorModel); floor.transform.setToTranslation(0f,-0.72f,0f);
         makeFrame();
@@ -82,14 +78,16 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
             strings.add(new ModelInstance(stringModel));
             strings.add(new ModelInstance(stringModel));
         }
-        impactSound = Gdx.audio.newSound(Gdx.files.internal("newton_impact.mp3"));
+        try { impactSound = Gdx.audio.newSound(Gdx.files.internal("newton_impact.mp3")); }
+        catch (RuntimeException ignored) { impactSound = null; }
+        nativeReady = NewtonPhysics.nativeCreate() != 0;
+        if (!nativeReady) throw new GdxRuntimeException("Newton Dynamics failed to initialize");
         Gdx.input.setInputProcessor(this);
         reset();
     }
 
     private void makeFrame() {
         frame.clear();
-        accents.clear();
         addBeam(0,-0.45f,0,6.8f,0.38f,2.75f);
         addBeam(-3.10f,1.42f,-1.02f,0.25f,4.15f,0.25f);
         addBeam(-3.10f,1.42f,1.02f,0.25f,4.15f,0.25f);
@@ -99,8 +97,6 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         addBeam(0,3.48f,1.02f,6.45f,0.24f,0.24f);
         addBeam(0,-0.20f,-1.10f,6.45f,0.18f,0.18f);
         addBeam(0,-0.20f,1.10f,6.45f,0.18f,0.18f);
-        addAccent(0,-0.235f,-1.285f,5.8f,0.025f,0.035f);
-        addAccent(0,-0.235f,1.285f,5.8f,0.025f,0.035f);
     }
 
     private void addBeam(float x,float y,float z,float sx,float sy,float sz){
@@ -109,24 +105,23 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         frame.add(m);
     }
 
-    private void addAccent(float x,float y,float z,float sx,float sy,float sz){
-        ModelInstance m=new ModelInstance(accentModel);
-        m.transform.setToTranslation(x,y,z).scale(sx,sy,sz);
-        accents.add(m);
-    }
-
     private float baseX(int i){ return (i-(N-1)/2f)*SPACING; }
 
     private void reset(){
-        for(int i=0;i<N;i++){theta[i]=0;omega[i]=0;}
+        if(nativeReady) NewtonPhysics.nativeReset();
         grabbed=-1; autoTimer=0;
+        for(int i=0;i<N;i++) {
+            physicsState[i*3]=baseX(i);
+            physicsState[i*3+1]=PIVOT_Y-L;
+            physicsState[i*3+2]=0f;
+        }
         updateTransforms();
     }
 
     @Override public void render() {
         float dt=Math.min(Gdx.graphics.getDeltaTime(),1f/30f);
         autoTimer += dt;
-        if(grabbed<0 && autoTimer>4.5f && allQuiet()) { theta[0]=-0.72f; omega[0]=0; autoTimer=0; }
+        if(grabbed<0 && autoTimer>4.5f && allQuiet()) { NewtonPhysics.nativeSetAngle(0,-0.72f); autoTimer=0; }
         stepPhysics(dt);
         updateTransforms();
 
@@ -136,48 +131,32 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         batch.begin(camera);
         batch.render(floor,env);
         for(ModelInstance m:frame) batch.render(m,env);
-        for(ModelInstance m:accents) batch.render(m,env);
         for(ModelInstance s:strings) batch.render(s,env);
         for(ModelInstance b:balls) batch.render(b,env);
         batch.end();
     }
 
-    private boolean allQuiet(){ for(float w:omega) if(Math.abs(w)>0.06f) return false; return true; }
+    private boolean allQuiet(){ return autoTimer > 4.5f; }
 
     private void stepPhysics(float dt){
-        int sub=4; float h=dt/sub;
-        for(int k=0;k<sub;k++){
-            for(int i=0;i<N;i++) if(i!=grabbed){
-                float a=-(G/L)*(float)Math.sin(theta[i]) - 0.0055f*omega[i];
-                omega[i]+=a*h; theta[i]+=omega[i]*h;
+        float impulse=NewtonPhysics.nativeStep(dt,physicsState);
+        float strength=MathUtils.clamp(impulse/2.2f,0f,1f);
+        long now=TimeUtils.millis();
+        if(strength>0.055f && now-lastImpactMs>=42L) {
+            lastImpactMs=now;
+            float volume=0.12f+strength*0.78f;
+            if(impactSound!=null) {
+                long id=impactSound.play(volume);
+                impactSound.setPitch(id,0.97f+MathUtils.random()*0.06f);
             }
-            for(int i=0;i<N-1;i++){
-                float xi=baseX(i)+L*(float)Math.sin(theta[i]);
-                float xj=baseX(i+1)+L*(float)Math.sin(theta[i+1]);
-                float gap=xj-xi;
-                float vi=L*omega[i]*(float)Math.cos(theta[i]);
-                float vj=L*omega[i+1]*(float)Math.cos(theta[i+1]);
-                if(gap<=2f*R+0.018f && vi>vj+0.012f){
-                    float wi=omega[i], wj=omega[i+1];
-                    omega[i]=wj*0.996f; omega[i+1]=wi*0.996f;
-                    float strength=Math.min(1f,Math.abs(vi-vj)/4.5f);
-                    long now=TimeUtils.millis();
-                    if(strength>0.08f && now-lastImpactMs>=55L) {
-                        lastImpactMs=now;
-                        float volume=0.18f+strength*0.72f;
-                        long id=impactSound.play(volume);
-                        impactSound.setPitch(id,0.96f+MathUtils.random()*0.08f);
-                        if(bridge!=null) bridge.impact(strength);
-                    }
-                }
-            }
+            if(bridge!=null) bridge.impact(strength);
         }
     }
 
     private void updateTransforms(){
         for(int i=0;i<N;i++){
-            float bx=baseX(i); float x=bx+L*(float)Math.sin(theta[i]); float y=PIVOT_Y-L*(float)Math.cos(theta[i]);
-            balls.get(i).transform.setToTranslation(x,y,0f);
+            float bx=baseX(i); float x=physicsState[i*3]; float y=physicsState[i*3+1]; float z=physicsState[i*3+2];
+            balls.get(i).transform.setToTranslation(x,y,z);
             Vector3 aFront=new Vector3(bx,PIVOT_Y,-STRING_Z), bFront=new Vector3(x,y,-R*.43f);
             Vector3 aBack=new Vector3(bx,PIVOT_Y,STRING_Z), bBack=new Vector3(x,y,R*.43f);
             setCylinderBetween(strings.get(i*2),aFront,bFront);
@@ -194,14 +173,16 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public boolean touchDown(int x,int y,int pointer,int button){
         float nx=x/(float)Math.max(1,Gdx.graphics.getWidth());
         grabbed = nx<0.5f ? 0 : N-1;
-        grabStartX=x; grabStartTheta=theta[grabbed]; omega[grabbed]=0; autoTimer=0; return true;
+        grabStartX=x;
+        grabStartTheta=(float)Math.asin(MathUtils.clamp((physicsState[grabbed*3]-baseX(grabbed))/L,-1f,1f));
+        autoTimer=0; return true;
     }
     @Override public boolean touchDragged(int x,int y,int pointer){
         if(grabbed<0)return false;
         float dx=(x-grabStartX)/(float)Math.max(1,Gdx.graphics.getWidth());
         float target=grabStartTheta+dx*2.7f;
         if(grabbed==0) target=Math.min(0.2f,target); else target=Math.max(-0.2f,target);
-        theta[grabbed]=MathUtils.clamp(target,-1.15f,1.15f); omega[grabbed]=0; return true;
+        NewtonPhysics.nativeSetAngle(grabbed,MathUtils.clamp(target,-1.15f,1.15f)); return true;
     }
     @Override public boolean touchUp(int x,int y,int pointer,int button){ grabbed=-1; return true; }
     @Override public boolean keyDown(int key){ if(key==Input.Keys.R) reset(); return false; }
@@ -210,5 +191,5 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public boolean touchCancelled(int x,int y,int pointer,int button){grabbed=-1;return true;}
 
     @Override public void resize(int w,int h){ camera.viewportWidth=w;camera.viewportHeight=h;camera.update(); }
-    @Override public void dispose(){ batch.dispose(); sphereModel.dispose(); beamModel.dispose(); stringModel.dispose(); floorModel.dispose(); accentModel.dispose(); if(impactSound!=null) impactSound.dispose(); }
+    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); sphereModel.dispose(); beamModel.dispose(); stringModel.dispose(); floorModel.dispose(); if(impactSound!=null) impactSound.dispose(); }
 }

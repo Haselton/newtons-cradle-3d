@@ -2,7 +2,7 @@ name: Build Native Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, newton-engine-rebuild ]
     paths:
       - 'native/**'
       - '.github/workflows/native-android.yml'
@@ -28,6 +28,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
+      - name: Fetch pinned Newton Dynamics engine
+        run: git clone --depth 1 https://github.com/JulioJerez/newton-dynamics.git app/src/main/cpp/newton-dynamics
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
