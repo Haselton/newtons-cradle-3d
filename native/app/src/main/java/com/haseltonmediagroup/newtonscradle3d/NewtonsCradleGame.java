@@ -19,7 +19,8 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private PerspectiveCamera camera;
     private ModelBatch batch;
     private Environment env;
-    private Model sphereModel, beamModel, rodModel, stringModel, floorModel;
+    private Model sphereModel, rodModel, stringModel, floorModel;
+    private Texture chromeTexture;
     private final Array<ModelInstance> balls = new Array<>();
     private final Array<ModelInstance> strings = new Array<>();
     private final Array<ModelInstance> frame = new Array<>();
@@ -47,8 +48,8 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public void create() {
         batch = new ModelBatch();
         camera = new PerspectiveCamera(42f, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camera.position.set(2.75f, 3.25f, 16.7f);
-        camera.lookAt(0f, 1.55f, 0f);
+        camera.position.set(0f, 1.55f, 18.6f);
+        camera.lookAt(0f, 1.42f, 0f);
         camera.near = 0.1f; camera.far = 100f; camera.update();
 
         env = new Environment();
@@ -58,8 +59,10 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         env.add(new PointLight().set(1f, 0.97f, 0.88f, -2.6f, 4.4f, 3.2f, 17f));
 
         ModelBuilder mb = new ModelBuilder();
+        chromeTexture=createChromeTexture();
         Material chrome = new Material(
-                ColorAttribute.createDiffuse(new Color(0.56f, 0.60f, 0.67f, 1f)),
+                TextureAttribute.createDiffuse(chromeTexture),
+                ColorAttribute.createDiffuse(Color.WHITE),
                 ColorAttribute.createSpecular(Color.WHITE),
                 FloatAttribute.createShininess(180f));
         Material frameChrome = new Material(
@@ -69,13 +72,12 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         Material cord = new Material(ColorAttribute.createDiffuse(new Color(0.55f,0.58f,0.62f,1f)), ColorAttribute.createSpecular(Color.WHITE), FloatAttribute.createShininess(48f));
         Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.006f,0.007f,0.009f,1f)), ColorAttribute.createSpecular(new Color(.08f,.09f,.11f,1f)), FloatAttribute.createShininess(32f));
 
-        sphereModel = mb.createSphere(R*2, R*2, R*2, 64, 64, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        beamModel = mb.createBox(1f,1f,1f, frameChrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        sphereModel = mb.createSphere(R*2, R*2, R*2, 64, 64, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal|VertexAttributes.Usage.TextureCoordinates);
         rodModel = mb.createCylinder(1f,1f,1f,32, frameChrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         stringModel = mb.createCylinder(0.024f,1f,0.024f,16,cord,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        floorModel = mb.createBox(14f,0.3f,8f,floorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        floorModel = mb.createBox(7.15f,0.42f,3.1f,floorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
 
-        floor = new ModelInstance(floorModel); floor.transform.setToTranslation(0f,-0.72f,0f);
+        floor = new ModelInstance(floorModel); floor.transform.setToTranslation(0f,-0.48f,0f);
         makeFrame();
         for(int i=0;i<N;i++) {
             balls.add(new ModelInstance(sphereModel));
@@ -90,9 +92,25 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         reset();
     }
 
+    private Texture createChromeTexture(){
+        Pixmap p=new Pixmap(256,128,Pixmap.Format.RGBA8888);
+        Color c=new Color();
+        for(int y=0;y<128;y++) for(int x=0;x<256;x++){
+            float v=y/127f;
+            float value=v<.16f?.78f:v<.31f?.96f:v<.43f?.40f:v<.51f?.93f:v<.68f?.23f:.055f;
+            float hx=(x/255f-.34f)/.12f, hy=(v-.22f)/.12f;
+            float highlight=MathUtils.clamp(1f-(hx*hx+hy*hy),0f,1f)*.75f;
+            value=MathUtils.clamp(value+highlight,0f,1f);
+            c.set(value*.91f,value*.95f,Math.min(1f,value*1.04f),1f);
+            p.drawPixel(x,y,Color.rgba8888(c));
+        }
+        Texture t=new Texture(p); p.dispose();
+        t.setFilter(Texture.TextureFilter.Linear,Texture.TextureFilter.Linear);
+        return t;
+    }
+
     private void makeFrame() {
         frame.clear();
-        addBeam(0,-0.48f,0,7.15f,0.42f,3.1f);
         addRod(new Vector3(-3.05f,-0.25f,-1.05f),new Vector3(-3.05f,3.55f,-1.05f),.13f);
         addRod(new Vector3(-3.05f,-0.25f, 1.05f),new Vector3(-3.05f,3.55f, 1.05f),.13f);
         addRod(new Vector3( 3.05f,-0.25f,-1.05f),new Vector3( 3.05f,3.55f,-1.05f),.13f);
@@ -105,12 +123,6 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         ModelInstance m=new ModelInstance(rodModel);
         setCylinderBetween(m,a,b);
         m.transform.scale(diameter,1f,diameter);
-        frame.add(m);
-    }
-
-    private void addBeam(float x,float y,float z,float sx,float sy,float sz){
-        ModelInstance m=new ModelInstance(beamModel);
-        m.transform.setToTranslation(x,y,z).scale(sx,sy,sz);
         frame.add(m);
     }
 
@@ -205,5 +217,5 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public boolean touchCancelled(int x,int y,int pointer,int button){if(grabbed>=0) NewtonPhysics.nativeRelease(grabbed,0f);grabbed=-1;return true;}
 
     @Override public void resize(int w,int h){ camera.viewportWidth=w;camera.viewportHeight=h;camera.update(); }
-    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); sphereModel.dispose(); beamModel.dispose(); rodModel.dispose(); stringModel.dispose(); floorModel.dispose(); if(impactSound!=null) impactSound.dispose(); }
+    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); sphereModel.dispose(); rodModel.dispose(); stringModel.dispose(); floorModel.dispose(); if(chromeTexture!=null) chromeTexture.dispose(); if(impactSound!=null) impactSound.dispose(); }
 }
