@@ -7,11 +7,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.haseltonmediagroup.newtonscradle3d.blackchrome'
+        applicationId 'com.haseltonmediagroup.newtonscradle3d.newtonengine'
         minSdk 26
         targetSdk 35
-        versionCode 6
-        versionName '1.1.0-newton-engine-test'
+        versionCode 1
+        versionName '1.1.1-newton-engine-install-fix'
         ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
         externalNativeBuild {
             cmake { cppFlags '-std=c++17 -O3' }
