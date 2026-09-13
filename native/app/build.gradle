@@ -5,11 +5,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.haseltonmediagroup.newtonscradle3d.rebuildtest'
+        applicationId 'com.haseltonmediagroup.newtonscradle3d.premiumtestv2'
         minSdk 26
         targetSdk 35
-        versionCode 12
-        versionName '2.1.0-premium-test'
+        versionCode 13
+        versionName '2.1.1-premium-test-v2'
     }
 
     compileOptions {
