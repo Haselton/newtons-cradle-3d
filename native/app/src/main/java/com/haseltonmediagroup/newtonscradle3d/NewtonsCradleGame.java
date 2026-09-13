@@ -32,6 +32,9 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private static final float L = 3.05f;
     private static final float R = 0.49f;
     private static final float PIVOT_Y = 3.15f;
+    // The native hinge remains at PIVOT_Y.  The suspension wire is visibly
+    // fastened to the rail above it, so rendering must use the rail height.
+    private static final float CABLE_ANCHOR_Y = 3.43f;
     private static final float SPACING = 0.98f;
     private static final float STRING_Z = 0.48f;
     private final float[] physicsState = new float[N * 3];
@@ -53,17 +56,18 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         camera.near = 0.1f; camera.far = 100f; camera.update();
 
         env = new Environment();
-        env.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.24f, 0.26f, 0.31f, 1f));
-        env.add(new DirectionalLight().set(1f, 1f, 1f, -0.45f, -0.75f, -0.55f));
-        env.add(new DirectionalLight().set(0.32f, 0.46f, 0.72f, 0.7f, -0.2f, 0.45f));
-        env.add(new PointLight().set(1f, 0.97f, 0.88f, -2.6f, 4.4f, 3.2f, 17f));
+        env.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.19f, 0.21f, 0.25f, 1f));
+        env.add(new DirectionalLight().set(1f, 1f, 1f, -0.32f, -0.82f, -0.48f));
+        env.add(new DirectionalLight().set(0.30f, 0.42f, 0.67f, 0.72f, -0.12f, 0.48f));
+        env.add(new PointLight().set(1f, 0.98f, 0.92f, -2.35f, 4.25f, 3.4f, 24f));
+        env.add(new PointLight().set(0.72f, 0.83f, 1f, 2.7f, 2.4f, 2.8f, 15f));
 
         ModelBuilder mb = new ModelBuilder();
         chromeTexture=createChromeTexture();
         Material chrome = new Material(
                 TextureAttribute.createDiffuse(chromeTexture),
-                ColorAttribute.createDiffuse(new Color(.82f,.85f,.90f,1f)),
-                ColorAttribute.createEmissive(new Color(.055f,.06f,.075f,1f)),
+                ColorAttribute.createDiffuse(new Color(.96f,.97f,1f,1f)),
+                ColorAttribute.createEmissive(new Color(.035f,.04f,.052f,1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
                 FloatAttribute.createShininess(180f));
         Material frameChrome = new Material(
@@ -94,22 +98,28 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     }
 
     private Texture createChromeTexture(){
-        Pixmap p=new Pixmap(256,128,Pixmap.Format.RGBA8888);
+        Pixmap p=new Pixmap(512,256,Pixmap.Format.RGBA8888);
         Color c=new Color();
-        for(int y=0;y<128;y++) for(int x=0;x<256;x++){
-            float v=y/127f;
-            float u=x/255f;
-            float value=.50f+.25f*MathUtils.cos((v-.18f)*MathUtils.PI);
-            float center=u<.5f?.25f:.75f;
-            float ox=(u-center)/.22f, oy=(v-.37f)/.25f;
-            float roomReflection=MathUtils.clamp(1f-(ox*ox+oy*oy),0f,1f);
-            value-=roomReflection*.58f;
-            float hx=(u-(center-.075f))/.055f, hy=(v-.265f)/.075f;
-            float highlightA=MathUtils.clamp(1f-(hx*hx+hy*hy),0f,1f);
-            hx=(u-(center+.085f))/.07f; hy=(v-.34f)/.065f;
-            float highlightB=MathUtils.clamp(1f-(hx*hx+hy*hy),0f,1f);
-            value=MathUtils.clamp(value+highlightA*.92f+highlightB*.78f,0.07f,1f);
-            c.set(value*.91f,value*.95f,Math.min(1f,value*1.04f),1f);
+        for(int y=0;y<256;y++) for(int x=0;x<512;x++){
+            float v=y/255f, u=x/511f;
+            // A wrapped studio panorama: bright ceiling, narrow horizon and a
+            // dark room/floor.  On a sphere these bend like real reflections.
+            float value=0.16f + 0.60f*(1f-v);
+            value += 0.31f*(float)Math.exp(-Math.pow((v-.48f)/.055f,2));
+            value -= 0.14f*(float)Math.exp(-Math.pow((v-.69f)/.15f,2));
+            float panels=(u<.20f || (u>.40f&&u<.57f) || u>.82f)?1f:0f;
+            float panelY=MathUtils.clamp(1f-Math.abs(v-.29f)/.25f,0f,1f);
+            value += panels*panelY*.30f;
+            float seam=Math.abs((u*8f)%1f-.5f);
+            if(seam>.475f && v<.58f) value-=.23f;
+            // Small softboxes keep the highlights asymmetric and photographic.
+            float dx=(u-.315f)/.052f, dy=(v-.235f)/.105f;
+            value += MathUtils.clamp(1f-dx*dx-dy*dy,0f,1f)*.70f;
+            dx=(u-.665f)/.072f; dy=(v-.33f)/.075f;
+            value += MathUtils.clamp(1f-dx*dx-dy*dy,0f,1f)*.50f;
+            value=MathUtils.clamp(value,0.045f,1f);
+            float cool=MathUtils.clamp((.55f-v)*.10f,0f,.05f);
+            c.set(value*.94f-cool*.25f,value*.965f,value+cool,1f);
             p.drawPixel(x,y,Color.rgba8888(c));
         }
         Texture t=new Texture(p); p.dispose();
@@ -182,8 +192,8 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         for(int i=0;i<N;i++){
             float bx=baseX(i); float x=physicsState[i*3]; float y=physicsState[i*3+1]; float z=physicsState[i*3+2];
             balls.get(i).transform.setToTranslation(x,y,z);
-            Vector3 aFront=new Vector3(bx,PIVOT_Y,-STRING_Z), bFront=new Vector3(x,y,-R*.43f);
-            Vector3 aBack=new Vector3(bx,PIVOT_Y,STRING_Z), bBack=new Vector3(x,y,R*.43f);
+            Vector3 aFront=new Vector3(bx,CABLE_ANCHOR_Y,-STRING_Z), bFront=new Vector3(x,y,-R*.43f);
+            Vector3 aBack=new Vector3(bx,CABLE_ANCHOR_Y,STRING_Z), bBack=new Vector3(x,y,R*.43f);
             setCylinderBetween(strings.get(i*2),aFront,bFront);
             setCylinderBetween(strings.get(i*2+1),aBack,bBack);
         }
