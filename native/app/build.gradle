@@ -6,12 +6,21 @@ android {
     namespace 'com.haseltonmediagroup.newtonscradle3d'
     compileSdk 35
 
+    signingConfigs {
+        debug {
+            storeFile file('../newton-test.keystore')
+            storePassword 'newton-test-only'
+            keyAlias 'newton-test'
+            keyPassword 'newton-test-only'
+        }
+    }
+
     defaultConfig {
-        applicationId 'com.haseltonmediagroup.newtonscradle3d.newtonengine'
+        applicationId 'com.haseltonmediagroup.newtonscradle3d.stabletest'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '1.1.1-newton-engine-install-fix'
+        versionCode 2
+        versionName '1.2.1-stable-signed-test'
         ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
         externalNativeBuild {
             cmake { cppFlags '-std=c++17 -O3' }
