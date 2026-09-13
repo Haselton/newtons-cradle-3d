@@ -72,7 +72,7 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeCreate(JNIEnv*, 
     gWorld = NewtonCreate();
     if (!gWorld) return 0;
     NewtonSetThreadsCount(gWorld, 1);
-    NewtonSetSolverModel(gWorld, 8);
+    NewtonSetSolverIterations(gWorld, 8);
     NewtonSetContactMergeTolerance(gWorld, 0.0001f);
     const int material = NewtonMaterialGetDefaultGroupID(gWorld);
     NewtonMaterialSetDefaultElasticity(gWorld, material, material, 0.997f);
@@ -136,4 +136,3 @@ Java_com_haseltonmediagroup_newtonscradle3d_NewtonPhysics_nativeDestroy(JNIEnv*,
     std::lock_guard<std::mutex> lock(gMutex);
     destroyWorld();
 }
-

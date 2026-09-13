@@ -16,6 +16,11 @@ add_subdirectory("${NEWTON_ROOT}/sdk" "${CMAKE_CURRENT_BINARY_DIR}/newton-sdk")
 
 add_library(cradle_physics SHARED cradle_physics.cpp)
 target_include_directories(cradle_physics PRIVATE "${NEWTON_ROOT}/sdk/dgNewton")
-target_compile_definitions(cradle_physics PRIVATE _NEWTON_STATIC_LIB __ANDROID__)
-target_link_libraries(cradle_physics PRIVATE newton android log)
+target_compile_definitions(cradle_physics PRIVATE _NEWTON_STATIC_LIB _POSIX_VER DG_SCALAR_VECTOR_CLASS)
 
+# Newton 3.14 predates modern Android/NDK platform detection. Apply its
+# portable POSIX/scalar configuration to the SDK targets as well.
+target_compile_definitions(dgCore PUBLIC _POSIX_VER DG_SCALAR_VECTOR_CLASS)
+target_compile_definitions(newton PUBLIC _POSIX_VER DG_SCALAR_VECTOR_CLASS)
+target_compile_definitions(dgPhysics PUBLIC _POSIX_VER DG_SCALAR_VECTOR_CLASS)
+target_link_libraries(cradle_physics PRIVATE newton android log)
