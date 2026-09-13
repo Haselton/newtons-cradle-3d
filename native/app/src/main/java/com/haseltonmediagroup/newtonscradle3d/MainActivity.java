@@ -17,6 +17,7 @@ import com.google.android.gms.ads.MobileAds;
 
 public class MainActivity extends AndroidApplication implements NewtonsCradleGame.PlatformBridge {
     private Vibrator vibrator;
+    private AdView adView;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -27,22 +28,47 @@ public class MainActivity extends AndroidApplication implements NewtonsCradleGam
         cfg.useAccelerometer = false;
         cfg.useCompass = false;
 
+        // Initialize LibGDX first so AndroidApplication owns a valid GL surface/lifecycle.
         View gameView = initializeForView(new NewtonsCradleGame(this), cfg);
         FrameLayout root = new FrameLayout(this);
-        root.addView(gameView, new FrameLayout.LayoutParams(-1, -1));
-
-        MobileAds.initialize(this, status -> {});
-        AdView ad = new AdView(this);
-        ad.setAdSize(AdSize.BANNER);
-        ad.setAdUnitId("ca-app-pub-3940256099942544/6300978111");
-        ad.loadAd(new AdRequest.Builder().build());
-
-        FrameLayout.LayoutParams adParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        root.addView(ad, adParams);
+        root.addView(gameView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
+
+        // AdMob is deliberately initialized after the game view. A failed ad must never
+        // prevent the physics toy from opening.
+        root.post(() -> {
+            try {
+                MobileAds.initialize(getApplicationContext(), status -> {});
+                adView = new AdView(this);
+                adView.setAdSize(AdSize.BANNER);
+                adView.setAdUnitId("ca-app-pub-3940256099942544/6300978111");
+                FrameLayout.LayoutParams adParams = new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+                root.addView(adView, adParams);
+                adView.loadAd(new AdRequest.Builder().build());
+            } catch (Throwable ignored) {
+                // Keep the cradle usable even when Play Services/AdMob is unavailable.
+            }
+        });
+    }
+
+    @Override protected void onPause() {
+        if (adView != null) adView.pause();
+        super.onPause();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (adView != null) adView.resume();
+    }
+
+    @Override protected void onDestroy() {
+        if (adView != null) adView.destroy();
+        super.onDestroy();
     }
 
     @Override public void impact(float strength) {
