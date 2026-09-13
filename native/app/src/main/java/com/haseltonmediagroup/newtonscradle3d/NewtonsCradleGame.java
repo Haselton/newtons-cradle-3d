@@ -62,15 +62,15 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         chromeTexture=createChromeTexture();
         Material chrome = new Material(
                 TextureAttribute.createDiffuse(chromeTexture),
-                TextureAttribute.createEmissive(chromeTexture),
-                ColorAttribute.createDiffuse(new Color(.34f,.36f,.40f,1f)),
+                ColorAttribute.createDiffuse(new Color(.82f,.85f,.90f,1f)),
+                ColorAttribute.createEmissive(new Color(.055f,.06f,.075f,1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
                 FloatAttribute.createShininess(180f));
         Material frameChrome = new Material(
-                ColorAttribute.createDiffuse(new Color(0.56f,0.60f,0.68f,1f)),
+                ColorAttribute.createDiffuse(new Color(0.34f,0.37f,0.43f,1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
                 FloatAttribute.createShininess(180f));
-        Material cord = new Material(ColorAttribute.createDiffuse(new Color(0.55f,0.58f,0.62f,1f)), ColorAttribute.createSpecular(Color.WHITE), FloatAttribute.createShininess(48f));
+        Material cord = new Material(ColorAttribute.createDiffuse(new Color(0.17f,0.18f,0.21f,1f)), ColorAttribute.createSpecular(new Color(.55f,.58f,.64f,1f)), FloatAttribute.createShininess(72f));
         Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.006f,0.007f,0.009f,1f)), ColorAttribute.createSpecular(new Color(.08f,.09f,.11f,1f)), FloatAttribute.createShininess(32f));
 
         sphereModel = mb.createSphere(R*2, R*2, R*2, 64, 64, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal|VertexAttributes.Usage.TextureCoordinates);
@@ -98,16 +98,17 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         Color c=new Color();
         for(int y=0;y<128;y++) for(int x=0;x<256;x++){
             float v=y/127f;
-            float value;
-            if(v<.18f) value=MathUtils.lerp(.56f,.92f,v/.18f);
-            else if(v<.34f) value=MathUtils.lerp(.92f,.60f,(v-.18f)/.16f);
-            else if(v<.50f) value=MathUtils.lerp(.60f,.80f,(v-.34f)/.16f);
-            else if(v<.63f) value=MathUtils.lerp(.80f,.25f,(v-.50f)/.13f);
-            else if(v<.80f) value=MathUtils.lerp(.25f,.50f,(v-.63f)/.17f);
-            else value=MathUtils.lerp(.50f,.18f,(v-.80f)/.20f);
-            float hx=(x/255f-.34f)/.12f, hy=(v-.22f)/.12f;
-            float highlight=MathUtils.clamp(1f-(hx*hx+hy*hy),0f,1f)*.75f;
-            value=MathUtils.clamp(value+highlight,0f,1f);
+            float u=x/255f;
+            float value=.50f+.25f*MathUtils.cos((v-.18f)*MathUtils.PI);
+            float center=u<.5f?.25f:.75f;
+            float ox=(u-center)/.22f, oy=(v-.37f)/.25f;
+            float roomReflection=MathUtils.clamp(1f-(ox*ox+oy*oy),0f,1f);
+            value-=roomReflection*.58f;
+            float hx=(u-(center-.075f))/.055f, hy=(v-.265f)/.075f;
+            float highlightA=MathUtils.clamp(1f-(hx*hx+hy*hy),0f,1f);
+            hx=(u-(center+.085f))/.07f; hy=(v-.34f)/.065f;
+            float highlightB=MathUtils.clamp(1f-(hx*hx+hy*hy),0f,1f);
+            value=MathUtils.clamp(value+highlightA*.92f+highlightB*.78f,0.07f,1f);
             c.set(value*.91f,value*.95f,Math.min(1f,value*1.04f),1f);
             p.drawPixel(x,y,Color.rgba8888(c));
         }
@@ -152,7 +153,7 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         updateTransforms();
 
         Gdx.gl.glViewport(0,0,Gdx.graphics.getWidth(),Gdx.graphics.getHeight());
-        Gdx.gl.glClearColor(0.018f,0.022f,0.032f,1f);
+        Gdx.gl.glClearColor(0.76f,0.78f,0.82f,1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT|GL20.GL_DEPTH_BUFFER_BIT);
         batch.begin(camera);
         batch.render(floor,env);
