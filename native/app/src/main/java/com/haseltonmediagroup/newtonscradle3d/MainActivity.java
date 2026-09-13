@@ -1,40 +1,37 @@
 package com.haseltonmediagroup.newtonscradle3d;
 
+import android.app.Activity;
 import android.os.Bundle;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
-import android.content.Context;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 
-import com.badlogic.gdx.backends.android.AndroidApplication;
-import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration;
-
-public class MainActivity extends AndroidApplication implements NewtonsCradleGame.PlatformBridge {
-    private Vibrator vibrator;
+public class MainActivity extends Activity {
+    private CradleView cradleView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        cradleView = new CradleView(this);
+        setContentView(cradleView);
 
-        AndroidApplicationConfiguration cfg = new AndroidApplicationConfiguration();
-        cfg.useImmersiveMode = true;
-        cfg.useAccelerometer = false;
-        cfg.useCompass = false;
-
-        // Minimal LibGDX startup path. Keep all third-party SDK initialization out
-        // until the core renderer is proven stable on-device.
-        initialize(new NewtonsCradleGame(this), cfg);
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        }
     }
 
     @Override
-    public void impact(float strength) {
-        if (vibrator != null && vibrator.hasVibrator()) {
-            long ms = strength > 0.7f ? 18 : 8;
-            if (android.os.Build.VERSION.SDK_INT >= 26) {
-                vibrator.vibrate(VibrationEffect.createOneShot(ms, 70));
-            } else {
-                vibrator.vibrate(ms);
-            }
-        }
+    protected void onResume() {
+        super.onResume();
+        if (cradleView != null) cradleView.resume();
+    }
+
+    @Override
+    protected void onPause() {
+        if (cradleView != null) cradleView.pause();
+        super.onPause();
     }
 }
