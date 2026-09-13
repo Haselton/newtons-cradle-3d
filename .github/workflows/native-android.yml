@@ -2,7 +2,7 @@ name: Build Native Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, rebuild-from-scratch ]
     paths:
       - 'native/**'
       - '.github/workflows/native-android.yml'
@@ -35,6 +35,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NewtonsCradle3D-debug
+          name: NewtonsCradle3D-rebuild-debug
           path: native/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
