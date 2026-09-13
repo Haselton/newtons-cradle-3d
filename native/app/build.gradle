@@ -19,8 +19,8 @@ android {
         applicationId 'com.haseltonmediagroup.newtonscradle3d.stabletest'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '1.3.0-chrome-sync-test'
+        versionCode 4
+        versionName '1.4.0-visible-chrome-single-clack'
         ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
         externalNativeBuild {
             cmake { cppFlags '-std=c++17 -O3' }
