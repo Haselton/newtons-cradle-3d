@@ -19,14 +19,14 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     private PerspectiveCamera camera;
     private ModelBatch batch;
     private Environment env;
-    private Model sphereModel, rodModel, stringModel, floorModel, roomFloorModel, backWallModel, shadowModel;
+    private Model sphereModel, rodModel, stringModel, floorModel, roomFloorModel, backWallModel, shadowModel, studyModel;
     private Texture chromeTexture;
     private final Array<ModelInstance> balls = new Array<>();
     private final Array<ModelInstance> strings = new Array<>();
     private final Array<ModelInstance> frame = new Array<>();
     private final Array<ModelInstance> shadows = new Array<>();
     private ModelInstance floor;
-    private ModelInstance roomFloor, backWall;
+    private ModelInstance roomFloor, backWall, study;
     private Sound impactSound;
     private long lastImpactMs;
 
@@ -53,8 +53,8 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public void create() {
         batch = new ModelBatch();
         camera = new PerspectiveCamera(42f, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camera.position.set(0f, 1.55f, 18.6f);
-        camera.lookAt(0f, 1.42f, 0f);
+        camera.position.set(0f, 1.62f, 20.4f);
+        camera.lookAt(0f, 1.35f, -.25f);
         camera.near = 0.1f; camera.far = 100f; camera.update();
 
         env = new Environment();
@@ -75,7 +75,7 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
                 ColorAttribute.createDiffuse(new Color(0.34f,0.37f,0.43f,1f)),
                 ColorAttribute.createSpecular(Color.WHITE),
                 FloatAttribute.createShininess(180f));
-        Material cord = new Material(ColorAttribute.createDiffuse(new Color(0.17f,0.18f,0.21f,1f)), ColorAttribute.createSpecular(new Color(.55f,.58f,.64f,1f)), FloatAttribute.createShininess(72f));
+        Material chromeWire = new Material(ColorAttribute.createDiffuse(new Color(.62f,.66f,.72f,1f)), ColorAttribute.createSpecular(Color.WHITE), FloatAttribute.createShininess(190f));
         Material floorMat = new Material(ColorAttribute.createDiffuse(new Color(0.006f,0.007f,0.009f,1f)), ColorAttribute.createSpecular(new Color(.08f,.09f,.11f,1f)), FloatAttribute.createShininess(32f));
         Material roomFloorMat = new Material(ColorAttribute.createDiffuse(new Color(.23f,.245f,.27f,1f)), ColorAttribute.createSpecular(new Color(.15f,.16f,.18f,1f)), FloatAttribute.createShininess(42f));
         Material wallMat = new Material(ColorAttribute.createDiffuse(new Color(.30f,.32f,.35f,1f)));
@@ -85,15 +85,17 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
 
         sphereModel = mb.createSphere(R*2, R*2, R*2, 64, 64, chrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal|VertexAttributes.Usage.TextureCoordinates);
         rodModel = mb.createCylinder(1f,1f,1f,32, frameChrome, VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
-        stringModel = mb.createCylinder(0.024f,1f,0.024f,16,cord,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        stringModel = mb.createCylinder(0.018f,1f,0.018f,16,chromeWire,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         floorModel = mb.createBox(6.55f,0.34f,2.65f,floorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         roomFloorModel = mb.createBox(14f,.10f,10f,roomFloorMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         backWallModel = mb.createBox(14f,9f,.12f,wallMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
         shadowModel = mb.createSphere(1f,.035f,.62f,32,8,shadowMat,VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal);
+        studyModel = createStudyModel(mb);
 
         floor = new ModelInstance(floorModel); floor.transform.setToTranslation(0f,-0.76f,0f);
         roomFloor = new ModelInstance(roomFloorModel); roomFloor.transform.setToTranslation(0f,-1.01f,-1.4f);
         backWall = new ModelInstance(backWallModel); backWall.transform.setToTranslation(0f,3.38f,-4.25f);
+        study = new ModelInstance(studyModel);
         makeFrame();
         for(int i=0;i<N;i++) {
             balls.add(new ModelInstance(sphereModel));
@@ -107,6 +109,57 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         if (!nativeReady) throw new GdxRuntimeException("Newton Dynamics failed to initialize");
         Gdx.input.setInputProcessor(this);
         reset();
+    }
+
+    private Model createStudyModel(ModelBuilder mb){
+        final long attrs=VertexAttributes.Usage.Position|VertexAttributes.Usage.Normal;
+        Material walnut=new Material(ColorAttribute.createDiffuse(new Color(.19f,.105f,.055f,1f)),ColorAttribute.createSpecular(new Color(.18f,.12f,.08f,1f)),FloatAttribute.createShininess(28f));
+        Material walnutEdge=new Material(ColorAttribute.createDiffuse(new Color(.075f,.040f,.025f,1f)));
+        Material bookRed=new Material(ColorAttribute.createDiffuse(new Color(.34f,.075f,.055f,1f)));
+        Material bookBlue=new Material(ColorAttribute.createDiffuse(new Color(.055f,.14f,.23f,1f)));
+        Material bookGold=new Material(ColorAttribute.createDiffuse(new Color(.43f,.29f,.08f,1f)));
+        Material glass=new Material(ColorAttribute.createDiffuse(new Color(.18f,.34f,.47f,1f)),ColorAttribute.createEmissive(new Color(.055f,.09f,.12f,1f)));
+        Material brass=new Material(ColorAttribute.createDiffuse(new Color(.48f,.34f,.12f,1f)),ColorAttribute.createSpecular(new Color(.9f,.72f,.35f,1f)),FloatAttribute.createShininess(110f));
+        Material art=new Material(ColorAttribute.createDiffuse(new Color(.48f,.42f,.31f,1f)));
+        mb.begin();
+        MeshPartBuilder wood=mb.part("walnut",GL20.GL_TRIANGLES,attrs,walnut);
+        MeshPartBuilder edge=mb.part("darkWood",GL20.GL_TRIANGLES,attrs,walnutEdge);
+        MeshPartBuilder red=mb.part("redBooks",GL20.GL_TRIANGLES,attrs,bookRed);
+        MeshPartBuilder blue=mb.part("blueBooks",GL20.GL_TRIANGLES,attrs,bookBlue);
+        MeshPartBuilder gold=mb.part("goldBooks",GL20.GL_TRIANGLES,attrs,bookGold);
+        MeshPartBuilder window=mb.part("window",GL20.GL_TRIANGLES,attrs,glass);
+        MeshPartBuilder metal=mb.part("brass",GL20.GL_TRIANGLES,attrs,brass);
+        MeshPartBuilder picture=mb.part("art",GL20.GL_TRIANGLES,attrs,art);
+        // Solid walnut desk and front apron put the cradle on a believable surface.
+        wood.box(0f,-.99f,-.45f,12.5f,.18f,5.4f);
+        edge.box(0f,-1.17f,-.30f,12.5f,.20f,.28f);
+        // Recessed bookcase at the back-left with depth, shelves and varied books.
+        edge.box(-4.35f,2.65f,-4.02f,2.70f,6.7f,.28f);
+        wood.box(-5.55f,2.65f,-3.78f,.18f,6.35f,.48f);
+        wood.box(-3.15f,2.65f,-3.78f,.18f,6.35f,.48f);
+        for(int shelf=0;shelf<4;shelf++) wood.box(-4.35f,-.05f+shelf*1.72f,-3.73f,2.38f,.14f,.58f);
+        for(int shelf=0;shelf<3;shelf++) for(int b=0;b<7;b++){
+            float bx=-5.31f+b*.31f;
+            float by=.47f+shelf*1.72f;
+            float bh=.78f+(b%3)*.10f;
+            (b%3==0?red:b%3==1?blue:gold).box(bx,by,-3.40f,.22f,bh,.32f);
+        }
+        // Window and mullions on the back-right create an unmistakable room plane.
+        window.box(4.12f,3.18f,-4.12f,3.05f,4.30f,.08f);
+        edge.box(4.12f,3.18f,-3.99f,3.34f,.15f,.16f);
+        edge.box(4.12f,3.18f,-3.99f,.15f,4.58f,.16f);
+        edge.box(4.12f,1.01f,-3.99f,3.34f,.16f,.16f);
+        edge.box(4.12f,5.35f,-3.99f,3.34f,.16f,.16f);
+        edge.box(2.54f,3.18f,-3.99f,.16f,4.58f,.16f);
+        edge.box(5.70f,3.18f,-3.99f,.16f,4.58f,.16f);
+        // Framed artwork, desk lamp and brass desk accessories add scale cues.
+        edge.box(-.15f,4.45f,-4.00f,2.12f,1.50f,.14f);
+        picture.box(-.15f,4.45f,-3.90f,1.82f,1.20f,.08f);
+        metal.box(4.72f,-.33f,-1.72f,.78f,.08f,.55f);
+        metal.box(4.72f,.30f,-1.72f,.08f,1.30f,.08f);
+        metal.box(4.30f,.93f,-1.72f,.92f,.08f,.08f);
+        metal.box(3.85f,.64f,-1.72f,.62f,.56f,.50f);
+        return mb.end();
     }
 
     private Texture createChromeTexture(){
@@ -180,6 +233,7 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
         batch.begin(camera);
         batch.render(backWall,env);
         batch.render(roomFloor,env);
+        batch.render(study,env);
         batch.render(floor,env);
         for(ModelInstance s:shadows) batch.render(s);
         for(ModelInstance m:frame) batch.render(m,env);
@@ -261,5 +315,5 @@ public class NewtonsCradleGame extends ApplicationAdapter implements InputProces
     @Override public boolean touchCancelled(int x,int y,int pointer,int button){if(grabbed>=0) NewtonPhysics.nativeRelease(grabbed,0f);grabbed=-1;return true;}
 
     @Override public void resize(int w,int h){ camera.viewportWidth=w;camera.viewportHeight=h;camera.update(); }
-    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); sphereModel.dispose(); rodModel.dispose(); stringModel.dispose(); floorModel.dispose(); roomFloorModel.dispose(); backWallModel.dispose(); shadowModel.dispose(); if(chromeTexture!=null) chromeTexture.dispose(); if(impactSound!=null) impactSound.dispose(); }
+    @Override public void dispose(){ if(nativeReady) NewtonPhysics.nativeDestroy(); batch.dispose(); sphereModel.dispose(); rodModel.dispose(); stringModel.dispose(); floorModel.dispose(); roomFloorModel.dispose(); backWallModel.dispose(); shadowModel.dispose(); studyModel.dispose(); if(chromeTexture!=null) chromeTexture.dispose(); if(impactSound!=null) impactSound.dispose(); }
 }
