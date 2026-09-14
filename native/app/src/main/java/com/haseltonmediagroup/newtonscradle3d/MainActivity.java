@@ -8,15 +8,28 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import com.badlogic.gdx.backends.android.AndroidApplication;
 import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.AdSize;
+import com.google.android.gms.ads.AdView;
+import com.google.android.gms.ads.MobileAds;
+import com.google.android.ump.ConsentInformation;
+import com.google.android.ump.ConsentRequestParameters;
+import com.google.android.ump.UserMessagingPlatform;
 
 public class MainActivity extends AndroidApplication implements NewtonsCradleGame.PlatformBridge {
     private Vibrator vibrator;
     private long lastImpactMs;
+    private AdView adView;
+    private FrameLayout adContainer;
+    private Button privacyButton;
+    private ConsentInformation consentInformation;
+    private boolean adsStarted;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,8 +60,7 @@ public class MainActivity extends AndroidApplication implements NewtonsCradleGam
         titleParams.topMargin=dp(12);
         root.addView(title,titleParams);
 
-        // Production AdMob's AdView is inserted into this reserved container.
-        FrameLayout adContainer = new FrameLayout(this);
+        adContainer = new FrameLayout(this);
         adContainer.setId(View.generateViewId());
         adContainer.setBackgroundColor(Color.rgb(18,19,22));
         TextView adLabel = new TextView(this);
@@ -61,7 +73,69 @@ public class MainActivity extends AndroidApplication implements NewtonsCradleGam
         FrameLayout.LayoutParams adParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,dp(50),Gravity.BOTTOM);
         root.addView(adContainer,adParams);
+
+        privacyButton = new Button(this);
+        privacyButton.setText("Privacy choices");
+        privacyButton.setTextSize(10);
+        privacyButton.setTextColor(Color.WHITE);
+        privacyButton.setBackgroundColor(Color.argb(170, 18, 19, 22));
+        privacyButton.setVisibility(View.GONE);
+        privacyButton.setOnClickListener(v -> UserMessagingPlatform.showPrivacyOptionsForm(
+                this, formError -> updatePrivacyButton()));
+        FrameLayout.LayoutParams privacyParams = new FrameLayout.LayoutParams(
+                dp(116), dp(38), Gravity.BOTTOM | Gravity.END);
+        privacyParams.bottomMargin = dp(52);
+        privacyParams.rightMargin = dp(8);
+        root.addView(privacyButton, privacyParams);
+
         setContentView(root);
+        gatherConsentAndLoadAds();
+    }
+
+    private void gatherConsentAndLoadAds() {
+        consentInformation = UserMessagingPlatform.getConsentInformation(this);
+        ConsentRequestParameters params = new ConsentRequestParameters.Builder().build();
+        consentInformation.requestConsentInfoUpdate(
+                this,
+                params,
+                () -> {
+                    updatePrivacyButton();
+                    UserMessagingPlatform.loadAndShowConsentFormIfRequired(this, formError -> {
+                        updatePrivacyButton();
+                        if (consentInformation.canRequestAds()) startAds();
+                    });
+                    if (consentInformation.canRequestAds()) startAds();
+                },
+                requestConsentError -> {
+                    updatePrivacyButton();
+                    if (consentInformation.canRequestAds()) startAds();
+                });
+    }
+
+    private void updatePrivacyButton() {
+        runOnUiThread(() -> privacyButton.setVisibility(
+                consentInformation != null &&
+                consentInformation.getPrivacyOptionsRequirementStatus()
+                        == ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED
+                        ? View.VISIBLE : View.GONE));
+    }
+
+    private synchronized void startAds() {
+        if (adsStarted) return;
+        adsStarted = true;
+        MobileAds.initialize(this, status -> runOnUiThread(this::loadBanner));
+    }
+
+    private void loadBanner() {
+        adView = new AdView(this);
+        adView.setAdUnitId(BuildConfig.ADMOB_BANNER_ID);
+        int widthPx = getResources().getDisplayMetrics().widthPixels;
+        int widthDp = Math.max(320, Math.round(widthPx / getResources().getDisplayMetrics().density));
+        adView.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, widthDp));
+        adContainer.removeAllViews();
+        adContainer.addView(adView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        adView.loadAd(new AdRequest.Builder().build());
     }
 
     private int dp(int value){ return Math.round(value*getResources().getDisplayMetrics().density); }
@@ -80,5 +154,11 @@ public class MainActivity extends AndroidApplication implements NewtonsCradleGam
                 vibrator.vibrate(ms);
             }
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (adView != null) adView.destroy();
+        super.onDestroy();
     }
 }
