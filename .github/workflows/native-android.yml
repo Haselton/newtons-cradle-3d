@@ -1,4 +1,4 @@
-name: Build Native Android APK
+name: Build Native Android
 
 on:
   push:
@@ -35,9 +35,19 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
+      - name: Build signed production bundle
+        run: gradle :app:bundleRelease --stacktrace
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: NewtonsCradle3D-debug
           path: native/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload production AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: NewtonsCradle3D-production-aab
+          path: native/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
