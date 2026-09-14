@@ -33,6 +33,8 @@ android {
         }
         release {
             minifyEnabled false
+            // Google Play App Signing replaces this upload certificate for users.
+            signingConfig signingConfigs.debug
             buildConfigField 'String', 'ADMOB_BANNER_ID', '"ca-app-pub-1051867648799965/1357645782"'
         }
     }
