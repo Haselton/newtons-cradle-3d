@@ -16,16 +16,28 @@ android {
     }
 
     defaultConfig {
-        applicationId 'com.haseltonmediagroup.newtonscradle3d.stabletest'
+        applicationId 'com.haseltonmediagroup.newtonscradle3d'
         minSdk 26
         targetSdk 35
-        versionCode 12
-        versionName '1.12.0-perspective-match'
+        versionCode 13
+        versionName '1.0.0'
         ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
         externalNativeBuild {
             cmake { cppFlags '-std=c++17 -O3' }
         }
     }
+
+    buildTypes {
+        debug {
+            buildConfigField 'String', 'ADMOB_BANNER_ID', '"ca-app-pub-3940256099942544/9214589741"'
+        }
+        release {
+            minifyEnabled false
+            buildConfigField 'String', 'ADMOB_BANNER_ID', '"ca-app-pub-1051867648799965/1357645782"'
+        }
+    }
+
+    buildFeatures { buildConfig true }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -45,6 +57,8 @@ dependencies {
     natives 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-arm64-v8a'
     natives 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-armeabi-v7a'
     natives 'com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86_64'
+    implementation 'com.google.android.gms:play-services-ads:25.4.0'
+    implementation 'com.google.android.ump:user-messaging-platform:4.0.0'
 }
 
 tasks.register('copyAndroidNatives') {
