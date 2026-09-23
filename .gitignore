@@ -10,3 +10,11 @@ UserSettings/
 *.user
 *.apk
 *.aab
+
+.gradle/
+**/build/
+**/.cxx/
+**/local.properties
+**/upload.jks
+native/app/src/main/cpp/newton-dynamics/
+__pycache__/

@@ -1,12 +1,16 @@
-name: Build Native Android
+name: Build and verify production Android
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, fix/restore-approved-study ]
     paths:
       - 'native/**'
+      - 'scripts/**'
       - '.github/workflows/native-android.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -15,45 +19,71 @@ jobs:
       run:
         working-directory: native
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
-      - name: Decode upload keystore
+      - name: Fetch approved Newton Dynamics revision
+        run: |
+          git init app/src/main/cpp/newton-dynamics
+          git -C app/src/main/cpp/newton-dynamics remote add origin https://github.com/JulioJerez/newton-dynamics.git
+          git -C app/src/main/cpp/newton-dynamics fetch --depth 1 origin 4b24733d12371e7812372d2a5d7a0f342258e093
+          git -C app/src/main/cpp/newton-dynamics checkout --detach FETCH_HEAD
+      - name: Decode existing production upload keystore
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
         run: |
           test -n "$SIGNING_KEYSTORE_BASE64"
           printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > upload.jks
-
-      - name: Build debug APK and signed release AAB
+      - name: Build matching release APK and AAB
         env:
           SIGNING_KEYSTORE_PATH: ${{ github.workspace }}/native/upload.jks
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: gradle :app:assembleDebug :app:bundleRelease --stacktrace
-
-      - name: Upload APK
+        run: gradle :app:assembleRelease :app:bundleRelease --stacktrace
+      - name: Verify approved artwork, audio, native alignment and signature
+        run: |
+          python3 ../scripts/verify-release.py app/build/outputs/apk/release/app-release.apk app/build/outputs/bundle/release/app-release.aab
+          jarsigner -verify app/build/outputs/bundle/release/app-release.aab
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+          sha256sum app/build/outputs/apk/release/app-release.apk app/build/outputs/bundle/release/app-release.aab > app/build/release-sha256.txt
+      - name: Enable Android emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Smoke test the actual signed release APK
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash scripts/emulator-smoke.sh
+      - name: Upload release evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NewtonsCradle3D-debug
-          path: native/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-
-      - name: Upload release AAB
+          name: NewtonsCradle3D-1.12.1-QA
+          path: |
+            qa/
+            native/app/build/release-sha256.txt
+          if-no-files-found: warn
+      - name: Upload verified production package
         uses: actions/upload-artifact@v4
         with:
-          name: NewtonsCradle3D-release-signed
-          path: native/app/build/outputs/bundle/release/app-release.aab
+          name: NewtonsCradle3D-1.12.1-build-14
+          path: |
+            native/app/build/outputs/apk/release/app-release.apk
+            native/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
+      - name: Remove upload keystore
+        if: always()
+        run: rm -f upload.jks
